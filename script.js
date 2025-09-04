@@ -475,15 +475,15 @@ function renderBills() {
       <td class="fit">${status}</td>
       <td class="fit">
         <div class="flex gap-2">
-          ${
-            dueAmt > 0
-              ? `<button class="btn ${
-                  paid ? "ghost" : "primary"
-                }" onclick="togglePaid('bills','${item.id}','${curM}')">${
-                  paid ? "إلغاء الدفع" : "تحديد كمدفوع"
-                }</button>`
-              : ""
-          }
+  ${
+  dueAmt > 0
+    ? `<button class="btn ${
+        paid ? "ghost" : "primary"
+      }" onclick="togglePaid('inst','${item.id}','${curM}')">${
+        paid ? "إلغاء الدفع" : (curM < ym(new Date()) ? "دفع متأخر" : "تحديد كمدفوع")
+      }</button>`
+    : ""
+}
           <button class="btn danger" onclick="deleteItem('bills','${
             item.id
           }')">حذف</button>
