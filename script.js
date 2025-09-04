@@ -52,8 +52,8 @@ const payLabel = (p) =>
     transfer: "🏦 تحويل",
     wallet: "📱 محفظة",
   }[p] ||
-  p ||
-  "-");
+    p ||
+    "-");
 const lastDayOfMonth = (y, m) => new Date(y, m, 0).getDate();
 const withinMonthRange = (start, end, yyyymm) => {
   const s = ym(start);
@@ -116,12 +116,12 @@ function statusChip(paid, dueAmt, item, yyyymm) {
   return `<span class="chip">مستحق هذا الشهر</span>`;
 }
 
-// ربط زر الإغلاق
+/* ===== زر إغلاق المودال ===== */
 document.addEventListener("DOMContentLoaded", () => {
   const closeBtn = document.getElementById("closeModal");
-  if (closeBtn) closeBtn.onclick = () => document.getElementById("modal")?.classList.remove("show");
+  if (closeBtn)
+    closeBtn.onclick = () => document.getElementById("modal")?.classList.remove("show");
 });
-
 
 /* ===== بداية التشغيل ===== */
 document.addEventListener("DOMContentLoaded", () => {
@@ -383,6 +383,30 @@ function togglePaid(kind, id, yyyymm) {
 }
 window.togglePaid = togglePaid;
 
+/* ===== دفع الشهر السابق (متأخر) ===== */
+function payPrev(kind, id) {
+  const curM = $("#monthPicker").value;
+  const prevM = prevMonthStr(curM);
+  const list = kind === "inst" ? getLS(K.inst, "[]") : getLS(K.bills, "[]");
+  const item = list.find((x) => x.id === id);
+  if (!item) return;
+
+  const prevDue = dueThisMonth(item, prevM);
+  const prevPaid = isPaid(kind, id, prevM);
+
+  if (prevDue > 0 && !prevPaid) {
+    setPaid(kind, id, prevM, true);
+    showToast(`✅ تم تسجيل دفع شهر ${prevM}`, "success");
+    if (kind === "inst") renderInst();
+    else renderBills();
+    renderKPIs();
+    updateAlerts();
+  } else {
+    showToast("ℹ️ لا يوجد مبلغ مستحق غير مدفوع في الشهر السابق.", "warning");
+  }
+}
+window.payPrev = payPrev;
+
 /* ===== Rendering tables ===== */
 function renderInst() {
   const curM = $("#monthPicker").value;
@@ -401,6 +425,8 @@ function renderInst() {
     return pa - pb || da - db || na.localeCompare(nb);
   });
 
+  const nowYM = ym(new Date());
+
   L.forEach((item) => {
     const dueAmt = dueThisMonth(item, curM);
     const paid = isPaid("inst", item.id, curM);
@@ -409,6 +435,12 @@ function renderInst() {
       m = +curM.slice(5, 7);
     const last = lastDayOfMonth(y, m);
     const dueDay = Math.min(item.dueDay || last, last);
+
+    // الشهر السابق
+    const prevM = prevMonthStr(curM);
+    const prevDue = dueThisMonth(item, prevM);
+    const prevPaid = isPaid("inst", item.id, prevM);
+    const canPayPrev = prevDue > 0 && !prevPaid;
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -422,16 +454,19 @@ function renderInst() {
         <div class="flex gap-2">
           ${
             dueAmt > 0
-              ? `<button class="btn ${
-                  paid ? "ghost" : "primary"
-                }" onclick="togglePaid('inst','${item.id}','${curM}')">${
-                  paid ? "إلغاء الدفع" : "تحديد كمدفوع"
-                }</button>`
+              ? `<button class="btn ${paid ? "ghost" : "primary"}"
+                   onclick="togglePaid('inst','${item.id}','${curM}')">
+                   ${paid ? "إلغاء الدفع" : (curM < nowYM ? "دفع هذا الشهر (متأخر)" : "تحديد كمدفوع")}
+                 </button>`
               : ""
           }
-          <button class="btn danger" onclick="deleteItem('inst','${
-            item.id
-          }')">حذف</button>
+          ${
+            canPayPrev
+              ? `<button class="btn warning" title="تسجيل دفع الشهر السابق (${prevM})"
+                   onclick="payPrev('inst','${item.id}')">دفع متأخر (${prevM})</button>`
+              : ""
+          }
+          <button class="btn danger" onclick="deleteItem('inst','${item.id}')">حذف</button>
         </div>
       </td>
     `;
@@ -456,6 +491,8 @@ function renderBills() {
     return pa - pb || da - db || na.localeCompare(nb);
   });
 
+  const nowYM = ym(new Date());
+
   L.forEach((item) => {
     const dueAmt = dueThisMonth(item, curM);
     const paid = isPaid("bills", item.id, curM);
@@ -464,6 +501,11 @@ function renderBills() {
       m = +curM.slice(5, 7);
     const last = lastDayOfMonth(y, m);
     const dueDay = Math.min(item.dueDay || last, last);
+
+    const prevM = prevMonthStr(curM);
+    const prevDue = dueThisMonth(item, prevM);
+    const prevPaid = isPaid("bills", item.id, prevM);
+    const canPayPrev = prevDue > 0 && !prevPaid;
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -475,18 +517,21 @@ function renderBills() {
       <td class="fit">${status}</td>
       <td class="fit">
         <div class="flex gap-2">
-  ${
-  dueAmt > 0
-    ? `<button class="btn ${
-        paid ? "ghost" : "primary"
-      }" onclick="togglePaid('inst','${item.id}','${curM}')">${
-        paid ? "إلغاء الدفع" : (curM < ym(new Date()) ? "دفع متأخر" : "تحديد كمدفوع")
-      }</button>`
-    : ""
-}
-          <button class="btn danger" onclick="deleteItem('bills','${
-            item.id
-          }')">حذف</button>
+          ${
+            dueAmt > 0
+              ? `<button class="btn ${paid ? "ghost" : "primary"}"
+                   onclick="togglePaid('bills','${item.id}','${curM}')">
+                   ${paid ? "إلغاء الدفع" : (curM < nowYM ? "دفع هذا الشهر (متأخر)" : "تحديد كمدفوع")}
+                 </button>`
+              : ""
+          }
+          ${
+            canPayPrev
+              ? `<button class="btn warning" title="تسجيل دفع الشهر السابق (${prevM})"
+                   onclick="payPrev('bills','${item.id}')">دفع متأخر (${prevM})</button>`
+              : ""
+          }
+          <button class="btn danger" onclick="deleteItem('bills','${item.id}')">حذف</button>
         </div>
       </td>
     `;
@@ -524,9 +569,7 @@ function renderExpenses() {
         <td class="fit">${payLabel(item.pay)}</td>
         <td class="fit">${fmt(item.amount)}</td>
         <td class="fit">
-          <button class="btn danger" onclick="deleteItem('exps','${
-            item.id
-          }')">حذف</button>
+          <button class="btn danger" onclick="deleteItem('exps','${item.id}')">حذف</button>
         </td>
       `;
       tbody.appendChild(tr);
@@ -554,19 +597,13 @@ function renderOne() {
       <td>${item.cat}</td>
       <td>${item.note || "-"}</td>
       <td class="fit">${fmt(item.amount)}</td>
-      <td class="fit"><span class="chip ${item.paid ? "green" : "orange"}">${
-      item.paid ? "مدفوع" : "غير مدفوع"
-    }</span></td>
+      <td class="fit"><span class="chip ${item.paid ? "green" : "orange"}">${item.paid ? "مدفوع" : "غير مدفوع"}</span></td>
       <td class="fit">
         <div class="flex gap-2">
-          <button class="btn ${
-            item.paid ? "ghost" : "primary"
-          }" onclick="togglePaid('one','${item.id}','${curM}')">${
-      item.paid ? "إلغاء الدفع" : "تحديد كمدفوع"
-    }</button>
-          <button class="btn danger" onclick="deleteItem('one','${
-            item.id
-          }')">حذف</button>
+          <button class="btn ${item.paid ? "ghost" : "primary"}" onclick="togglePaid('one','${item.id}','${curM}')">
+            ${item.paid ? "إلغاء الدفع" : "تحديد كمدفوع"}
+          </button>
+          <button class="btn danger" onclick="deleteItem('one','${item.id}')">حذف</button>
         </div>
       </td>
     `;
@@ -596,15 +633,10 @@ function renderBudgets() {
       <td class="fit">${fmt(b.limit)}</td>
       <td class="fit">${fmt(spent)}</td>
       <td class="fit">
-        <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(
-          pct,
-          100
-        )}%"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(pct,100)}%"></div></div>
         <span class="chip ${status}">${pct.toFixed(1)}%</span>
       </td>
-      <td class="fit"><button class="btn danger" onclick="deleteItem('budgets','${
-        b.id || b.cat
-      }')">حذف</button></td>
+      <td class="fit"><button class="btn danger" onclick="deleteItem('budgets','${b.id || b.cat}')">حذف</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -662,52 +694,16 @@ function renderKPIs() {
       <tr><th>البند</th><th class="fit">المبلغ</th><th class="fit">النسبة من الدخل</th></tr>
     </thead>
     <tbody>
-      <tr><td>💰 إجمالي الدخل</td><td class="fit font-bold">${fmt(
-        salary
-      )}</td><td class="fit">100%</td></tr>
-      <tr><td>🏦 الأقساط الثابتة</td><td class="fit">${fmt(
-        instTotal
-      )}</td><td class="fit">${
-    salary ? ((instTotal / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td>🧾 الفواتير الشهرية</td><td class="fit">${fmt(
-        billsTotal
-      )}</td><td class="fit">${
-    salary ? ((billsTotal / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td>💳 المصاريف اليومية</td><td class="fit">${fmt(
-        exps
-      )}</td><td class="fit">${
-    salary ? ((exps / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td>⚠️ المصاريف الخارجية</td><td class="fit">${fmt(
-        ones
-      )}</td><td class="fit">${
-    salary ? ((ones / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td>↩️ متأخرات مُرحّلة</td><td class="fit">${fmt(
-        carry
-      )}</td><td class="fit">${
-    salary ? ((carry / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr style="border-top:2px solid var(--border)"><td class="font-bold">💸 إجمالي المصروفات</td><td class="fit font-bold">${fmt(
-        totalOut
-      )}</td><td class="fit font-bold">${
-    salary ? ((totalOut / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td class="font-bold">🏦 الادخار الفعلي</td><td class="fit font-bold" style="color:${
-        actualSaving >= 0 ? "var(--accent-2)" : "var(--danger)"
-      }">${fmt(actualSaving)}</td><td class="fit">${
-    salary ? ((actualSaving / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td>🎯 الادخار المستهدف</td><td class="fit">${fmt(
-        savingTarget
-      )}</td><td class="fit">${
-    salary ? ((savingTarget / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td class="font-bold">💵 الصافي المتبقي</td><td class="fit font-bold" style="color:${
-        net >= 0 ? "var(--accent-2)" : "var(--danger)"
-      }">${fmt(net)}</td><td class="fit">—</td></tr>
+      <tr><td>💰 إجمالي الدخل</td><td class="fit font-bold">${fmt(salary)}</td><td class="fit">100%</td></tr>
+      <tr><td>🏦 الأقساط الثابتة</td><td class="fit">${fmt(instTotal)}</td><td class="fit">${salary ? ((instTotal / salary) * 100).toFixed(1) : 0}%</td></tr>
+      <tr><td>🧾 الفواتير الشهرية</td><td class="fit">${fmt(billsTotal)}</td><td class="fit">${salary ? ((billsTotal / salary) * 100).toFixed(1) : 0}%</td></tr>
+      <tr><td>💳 المصاريف اليومية</td><td class="fit">${fmt(exps)}</td><td class="fit">${salary ? ((exps / salary) * 100).toFixed(1) : 0}%</td></tr>
+      <tr><td>⚠️ المصاريف الخارجية</td><td class="fit">${fmt(ones)}</td><td class="fit">${salary ? ((ones / salary) * 100).toFixed(1) : 0}%</td></tr>
+      <tr><td>↩️ متأخرات مُرحّلة</td><td class="fit">${fmt(carry)}</td><td class="fit">${salary ? ((carry / salary) * 100).toFixed(1) : 0}%</td></tr>
+      <tr style="border-top:2px solid var(--border)"><td class="font-bold">💸 إجمالي المصروفات</td><td class="fit font-bold">${fmt(totalOut)}</td><td class="fit font-bold">${salary ? ((totalOut / salary) * 100).toFixed(1) : 0}%</td></tr>
+      <tr><td class="font-bold">🏦 الادخار الفعلي</td><td class="fit font-bold" style="color:${actualSaving >= 0 ? "var(--accent-2)" : "var(--danger)"}">${fmt(actualSaving)}</td><td class="fit">${salary ? ((actualSaving / salary) * 100).toFixed(1) : 0}%</td></tr>
+      <tr><td>🎯 الادخار المستهدف</td><td class="fit">${fmt(savingTarget)}</td><td class="fit">${salary ? ((savingTarget / salary) * 100).toFixed(1) : 0}%</td></tr>
+      <tr><td class="font-bold">💵 الصافي المتبقي</td><td class="fit font-bold" style="color:${net >= 0 ? "var(--accent-2)" : "var(--danger)"}">${fmt(net)}</td><td class="fit">—</td></tr>
     </tbody>
   `;
 }
@@ -962,4 +958,3 @@ function renderAll() {
   refreshCharts();
   updateAlerts();
 }
-
