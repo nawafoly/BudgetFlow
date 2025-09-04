@@ -116,6 +116,13 @@ function statusChip(paid, dueAmt, item, yyyymm) {
   return `<span class="chip">مستحق هذا الشهر</span>`;
 }
 
+// ربط زر الإغلاق
+document.addEventListener("DOMContentLoaded", () => {
+  const closeBtn = document.getElementById("closeModal");
+  if (closeBtn) closeBtn.onclick = () => document.getElementById("modal")?.classList.remove("show");
+});
+
+
 /* ===== بداية التشغيل ===== */
 document.addEventListener("DOMContentLoaded", () => {
   // defaults
@@ -955,7 +962,4 @@ function renderAll() {
   refreshCharts();
   updateAlerts();
 }
-
-// زر الإغلاق
-$("#closeModal").onclick = hideSheet;
 
