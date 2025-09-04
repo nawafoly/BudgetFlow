@@ -850,3 +850,37 @@
   box-shadow: 0 4px 12px rgba(0,0,0,.2);
   cursor: pointer;
 }
+
+.bottom-nav {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid #ddd;
+  padding: 8px 0;
+  z-index: 100;
+}
+
+.bottom-nav a,
+.bottom-nav button {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+  color: #333;
+  background: none;
+  border: none;
+}
+
+.fab-inline {
+  background: var(--accent);
+  color: #fff;
+  font-size: 18px;
+  border-radius: 50px;
+  padding: 10px 16px;
+  margin: 0 6px;
+  flex: none; /* عشان ما يتمدد */
+}
