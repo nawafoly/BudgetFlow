@@ -955,3 +955,7 @@ function renderAll() {
   refreshCharts();
   updateAlerts();
 }
+
+// زر الإغلاق
+$("#closeModal").onclick = hideSheet;
+
