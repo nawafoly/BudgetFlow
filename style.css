@@ -798,5 +798,40 @@
         .full {
             grid-column: 1 / -1;
         }
+
+/* تأكد أن الشيت هو المرجع للـ absolute */
+.modal .sheet {
+  position: relative;            /* مهم */
+  /* باقي خصائصك كما هي */
+  padding-top: 48px;             /* مساحة فوق للزر والهاندل */
+}
+
+/* زر الإغلاق فوق كل شيء داخل الشيت */
+.modal .close-btn {
+  position: absolute;
+  top: 10px;
+  left: 10px;                    /* RTL: لو تبيها يمين غيّر لـ right */
+  z-index: 1002;                 /* أعلى من أي عنصر داخل الشيت */
+  background: transparent;
+  border: 0;
+  font-size: 18px;
+  line-height: 1;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--ink, #e7ecf3);
+  border-radius: 8px;
+}
+
+/* لمسة تباين عند المرور */
+.modal .close-btn:hover {
+  background: rgba(255,255,255,.06);
+}
+
+/* لو عندك عناصر داخلياً فيها z-index عالي، خفّضه */
+.modal .sheet * {
+  z-index: 1;                    /* قاعدة آمنة */
+}
+.modal .handle { z-index: 1; }
+
     </style>
 
