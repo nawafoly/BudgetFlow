@@ -542,60 +542,6 @@ canvas {
     width: 1%;
 }
 
-/* نمط Stack للجوال */
-@media (max-width: 768px) {
-    .table.responsive-stack {
-        display: block;
-    }
-
-    .table.responsive-stack thead {
-        display: none;
-    }
-
-    .table.responsive-stack tr {
-        display: block;
-        margin: 12px 8px;
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        overflow: hidden;
-        background: transparent;
-    }
-
-    .table.responsive-stack td {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding-inline-start: 42%;
-        position: relative;
-        white-space: normal;
-        border-bottom: 1px solid var(--border);
-    }
-
-    .table.responsive-stack td::before {
-        content: attr(data-label);
-        position: absolute;
-        inset-inline-start: 12px;
-        width: 38%;
-        white-space: nowrap;
-        font-weight: 700;
-        color: var(--muted);
-        text-align: right;
-    }
-
-    .table.responsive-stack td:last-child {
-        border-bottom: 0;
-    }
-
-    /* أزرار الجدول تصير صفّين عند الضيق */
-    .table.responsive-stack td .flex {
-        flex-wrap: wrap;
-    }
-
-    .table.responsive-stack td .btn {
-        flex: 1 1 140px;
-        min-width: 0;
-    }
-}
 
 /* صف "لا توجد بيانات" */
 .table.responsive-stack td.muted {
@@ -1147,20 +1093,11 @@ body {
 @media (max-width: 430px) { :root { --stack-label-w: 30%; } }
 @media (max-width: 380px) { :root { --stack-label-w: 27%; } }
 
-/* جدول الـ stack (جوال) – استخدم المتغيّر بدل رقم ثابت */
-@media (max-width: 768px){
-  .table.responsive-stack td{
-    padding-inline-start: calc(var(--stack-label-w) + 12px);
-  }
-  .table.responsive-stack td::before{
-    width: var(--stack-label-w);
-  }
-}
 
 /* صف لا توجد بيانات – يبقى سطر واحد صغير بدون صندوق داخلي */
 .table.responsive-stack tr:has(td.muted){ border: 0; }
 .table.responsive-stack td.muted{
-  display:block; border:0 !important; text-align:center; padding:14px 10px;
+  border:0 !important; text-align:center; padding:14px 10px;
 }
 .table.responsive-stack td.muted::before{ content:''; }
 
@@ -1297,50 +1234,6 @@ body{
   :root{ --fab: 56px; }
 }
 
-/* ===== Stack rows fill width on mobile ===== */
-@media (max-width: 768px){
-  /* لا padding داخلي للوعاء */
-  .table-container{ padding: 0; }
-
-  /* الصف بطاقة ممتدة بعرض الحاوية */
-  .table.responsive-stack tr{
-    display: block;
-    margin-block: 8px;        /* مسافة بين البطاقات */
-    margin-inline: 0;         /* أهم سطر: بدون فراغ يمين/يسار */
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    overflow: hidden;
-    background: rgba(59,130,246,.08);   /* الأزرق الخفيف */
-  }
-  .table.responsive-stack tr:hover{
-    background: rgba(59,130,246,.14);
-  }
-
-  /* كل خلية سطر بعناوين على اليمين */
-  .table.responsive-stack td{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    border-bottom: 1px solid var(--border);
-    padding: 10px 12px 10px calc(var(--stack-label-w) + 10px);
-    white-space: normal;
-  }
-  .table.responsive-stack td:last-child{ border-bottom: 0; }
-
-  .table.responsive-stack td::before{
-    width: var(--stack-label-w);
-    font-size: 12.5px;
-    color: var(--muted);
-  }
-
-  /* أشياء ما نبيها تتكسر للسطر الثاني (تمنع فراغات غريبة) */
-  .table.responsive-stack td[data-label="المبلغ"],
-  .table.responsive-stack td[data-label="الدفع"],
-  .table.responsive-stack td[data-label="استحقاق هذا الشهر"],
-  .table.responsive-stack td .fit{ white-space: nowrap; }
-
-  .chip{ padding: 3px 8px; line-height: 1.1; }
-}
 
 /* تحكم أدق بعرض عمود اللّيبل */
 :root{ --stack-label-w: 26%; }
@@ -1350,47 +1243,7 @@ body{
 
 /* ===== iPhone 15 Pro/Max & iOS Safari polish (paste at the very end) ===== */
 
-/* 1) شدّ الصفوف لتملأ العرض + أزرق full-bleed */
-@supports (-webkit-touch-callout:none){
-  @media (max-width: 768px){
-    .table-container{ padding:0 !important; }
 
-    .table.responsive-stack tr{
-      margin-inline: 0 !important;     /* أهم سطر: بدون فراغ جانبي */
-      display:block !important;
-      border:1px solid var(--border);
-      border-radius:14px;
-      overflow:hidden;
-      background: rgba(59,130,246,.08);          /* الأزرق */
-    }
-    .table.responsive-stack tr:hover{
-      background: rgba(59,130,246,.14);
-    }
-
-    .table.responsive-stack td{
-      display:flex !important;
-      align-items:center;
-      gap:8px;
-      border-bottom:1px solid var(--border);
-      padding:10px 12px 10px calc(var(--stack-label-w) + 10px) !important;
-    }
-    .table.responsive-stack td:last-child{ border-bottom:0; }
-
-    .table.responsive-stack td::before{
-      width: var(--stack-label-w) !important;
-      font-size:12.5px;
-      color:var(--muted);
-    }
-
-    /* لا تنكسر الأجزاء الحساسة لسطرين */
-    .table.responsive-stack td[data-label="المبلغ"],
-    .table.responsive-stack td[data-label="الدفع"],
-    .table.responsive-stack td[data-label="استحقاق هذا الشهر"],
-    .table.responsive-stack td .fit{ white-space: nowrap !important; }
-
-    .chip{ padding:3px 8px; line-height:1.1; }
-  }
-}
 
 /* 2) ضبط خاص لـ 430px (iPhone 15/Pro/Max) لتقليل مساحة عمود اللّيبل */
 @media (min-width: 420px) and (max-width: 460px){
@@ -1479,3 +1332,279 @@ input, select, textarea{ font-size: 16px; }
 }
 
 
+
+
+
+/* ===== Unified Responsive Stack Tables ===== */
+@media (max-width: 768px) {
+    .table.responsive-stack thead {
+        display: none;
+    }
+
+    .table.responsive-stack tr {
+        display: block;
+        margin-block: 8px;
+        margin-inline: 0;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+        background: rgba(59, 130, 246, .08);
+    }
+
+    .table.responsive-stack tr:hover {
+        background: rgba(59, 130, 246, .14);
+    }
+
+    .table.responsive-stack td {
+        display: grid;
+        grid-template-columns: var(--stack-label-w) 1fr;
+        align-items: center;
+        gap: 8px;
+        border-bottom: 1px solid var(--border);
+        padding: 10px 12px;
+        white-space: normal;
+    }
+
+    .table.responsive-stack td:last-child {
+        border-bottom: 0;
+    }
+
+    .table.responsive-stack td::before {
+        content: attr(data-label);
+        font-size: 12.5px;
+        color: var(--muted);
+        text-align: right;
+    }
+
+    .table.responsive-stack td[data-label="المبلغ"],
+    .table.responsive-stack td[data-label="الدفع"],
+    .table.responsive-stack td[data-label="استحقاق هذا الشهر"] {
+        white-space: nowrap;
+    }
+
+    .table.responsive-stack td .flex.gap-2 {
+        flex-wrap: wrap;
+    }
+}
+
+:root {
+    --stack-label-w: 26%;
+}
+
+@media (max-width: 540px) {
+    :root {
+        --stack-label-w: 24%;
+    }
+}
+
+@media (max-width: 430px) {
+    :root {
+        --stack-label-w: 22%;
+    }
+}
+
+@media (max-width: 380px) {
+    :root {
+        --stack-label-w: 20%;
+    }
+}
+
+@media (min-width: 420px) and (max-width: 460px) {
+    :root {
+        --stack-label-w: 22% !important;
+    }
+}
+
+@media (max-width: 768px){
+  .table.responsive-stack{ display:block !important; }
+  .table.responsive-stack thead{ display:none !important; }
+  .table.responsive-stack tbody,
+  .table.responsive-stack tr{ display:block !important; }
+
+  .table.responsive-stack tr{
+    margin:8px 0; border:1px solid var(--border);
+    border-radius:14px; overflow:hidden;
+    background: rgba(59,130,246,.08);
+  }
+
+  /* grid بدل flex */
+  :root{ --stack-label-w: 28%; }
+  .table.responsive-stack td{
+    display:grid !important;
+    grid-template-columns: var(--stack-label-w) 1fr !important;
+    align-items:center; gap:8px;
+    padding:10px 12px !important;
+    border-bottom:1px solid var(--border);
+    white-space:normal;
+  }
+  .table.responsive-stack td:last-child{ border-bottom:0; }
+
+  .table.responsive-stack td::before{
+    content: attr(data-label);
+    font-weight:700; color:var(--muted);
+  }
+
+  .table.responsive-stack td[data-label="المبلغ"],
+  .table.responsive-stack td[data-label="الدفع"],
+  .table.responsive-stack td[data-label="استحقاق هذا الشهر"],
+  .table.responsive-stack td .fit{ white-space:nowrap; }
+}
+
+/* إبطال أي padding-inline-start قديم إن بقي سطر ناسي */
+.table.responsive-stack td{ padding-inline-start:unset !important; }
+
+/* ===== Installments as Cards (no table) ===== */
+.cards-list{
+  display: grid;
+  gap: 10px;
+}
+
+.inst-card{
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+:root.light .inst-card{ background:#fff; }
+
+.inst-card-head{
+  display:flex; align-items:center; gap:10px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+/* اسم + مبلغ بارز */
+.inst-title{ font-weight:800; font-size:16px; }
+.inst-amount{ font-weight:800; }
+
+/* شبكة التفاصيل */
+.inst-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+
+.inst-item{
+  display:grid;
+  grid-template-columns: var(--stack-label-w,28%) 1fr;
+  align-items:center; gap:8px;
+}
+.inst-item .lbl{ font-weight:700; color: var(--muted); }
+.inst-item .val{ white-space:nowrap; }
+
+/* شارة الحالة */
+.inst-status{ margin-inline-start:auto; }
+
+/* أزرار الإجراءات */
+.inst-actions{
+  display:flex; gap:8px; flex-wrap:wrap;
+  margin-top: 10px;
+}
+
+/* موبايل: عمود واحد */
+@media (max-width: 768px){
+  .inst-grid{ grid-template-columns: 1fr; }
+  :root{ --stack-label-w: 28%; }
+}
+
+/* منع انعكاس اتجاه التاريخ/السهم في RTL */
+.inst-item[data-k="range"] .val{
+  direction:ltr; text-align:left; unicode-bidi:plaintext;
+}
+
+/* ==== Polish: Installment Cards ==== */
+:root{
+  --radius: 16px;
+  --shadow: 0 8px 24px rgba(0,0,0,.10);
+  --ring: 0 0 0 3px rgba(79,140,255,.18);
+}
+
+.cards-list{
+  display:grid; gap:14px;
+}
+
+.inst-card{
+  background: var(--panel, rgba(255,255,255,.06));
+  border: 1px solid var(--border, #1f2937);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.inst-card:hover{ transform: translateY(-1px); box-shadow: 0 10px 26px rgba(0,0,0,.14); }
+:root.light .inst-card{ background:#fff; }
+
+.inst-card-head{
+  display:flex; align-items:center; gap:10px;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+/* العنوان + المبلغ */
+.inst-title{
+  font-weight:800; font-size:17px; letter-spacing:.2px;
+}
+.inst-amount{
+  font-weight:900; font-size:18px;
+}
+
+/* سطر ثانوي للمدى تحت العنوان */
+.inst-sub{
+  margin-top:2px; color:var(--muted,#8da3c1);
+  font-size:13px; line-height:1.4;
+  direction:ltr; text-align:left; unicode-bidi:plaintext;
+}
+
+/* شارة الحالة */
+.inst-status .chip{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 10px; border-radius:999px;
+  font-size:12px; font-weight:700;
+  border:1px solid currentColor; opacity:.95;
+}
+.chip.ok{ color:#22c55e; background: rgba(34,197,94,.10); }
+.chip.due{ color:#eab308; background: rgba(234,179,8,.12); }
+.chip.late{ color:#ef4444; background: rgba(239,68,68,.10); }
+
+/* شبكة التفاصيل */
+.inst-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  margin-top:10px;
+}
+
+.inst-item{
+  display:grid;
+  grid-template-columns: var(--stack-label-w,32%) 1fr;
+  align-items:center; gap:10px;
+}
+.inst-item .lbl{ font-weight:800; color: var(--muted,#8da3c1); }
+.inst-item .val{ white-space:nowrap; }
+
+/* أزرار الإجراءات */
+.inst-actions{
+  display:flex; gap:10px; flex-wrap:wrap;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* أزرار أجمل */
+.btn{ border-radius: 999px; padding:8px 12px; font-weight:700; border:1px solid transparent; }
+.btn.primary{ background: var(--accent,#4f8cff); color:#fff; }
+.btn.primary:hover{ filter:brightness(1.03); box-shadow: var(--ring); }
+.btn.ghost{ background: transparent; border-color: var(--border,#1f2937); }
+.btn.warning{ background: #fff7ed; border-color:#fdba74; color:#d97706; }
+.btn.danger{ background: #fff1f2; border-color:#fda4af; color:#e11d48; }
+.btn:active{ transform: translateY(1px); }
+
+/* موبايل */
+@media (max-width: 768px){
+  .inst-grid{ grid-template-columns: 1fr; }
+  :root{ --stack-label-w: 34%; }
+}
+
+/* منع انعكاس اتجاه التاريخ/السهم */
+.inst-item[data-k="range"] .val,
+.inst-sub{ direction:ltr; text-align:left; unicode-bidi:plaintext; }
