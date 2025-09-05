@@ -1,27 +1,35 @@
 /* =========================
-   إدارة مالي — نسخة كاملة مستقرة (محدّثة)
-   نواف: كل الأقسام مربوطة ومحفوظة بـ localStorage
+   إدارة مالي — script.js (v3.2)
+   - Router خفيف
+   - LocalStorage
+   - جداول + تقارير + تصدير
+   - تنبيهات + FAB + Modal
+   - Charts (Chart.js)
 ========================= */
 
-/* ===== Helpers ===== */
-// يستخرج YYYY-MM بدون انزياح توقيت
+// ===== Helpers
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+// YYYY-MM من تاريخ (محلي بلا انزياح)
 const ym = (d) => {
   if (!d) return "";
-  if (typeof d === "string") return d.slice(0, 7); // "YYYY-MM-DD" من input[type=date]
+  if (typeof d === "string") return d.slice(0, 7);
   const t = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
   return t.toISOString().slice(0, 7);
 };
-
-// تطبيع أسماء التصنيفات (للجمع والمطابقة)
-const normCat = (s) => (s || "").toString().trim().toLowerCase();
-
-const $ = (s, r = document) => r.querySelector(s);
-const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const today = new Date().toISOString().slice(0, 10);
+const normCat = (s) => (s || "").toString().trim().toLowerCase();
 const fmt = (n) =>
-  Number(n || 0).toLocaleString("ar-EG", { maximumFractionDigits: 0 }) + " ر.س";
+  Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 }) + " ر.س";
+const lastDayOfMonth = (y, m) => new Date(y, m, 0).getDate();
+const prevMonthStr = (yyyymm) => {
+  let [y, m] = yyyymm.split("-").map(Number);
+  m === 1 ? (y--, (m = 12)) : m--;
+  return `${y}-${String(m).padStart(2, "0")}`;
+};
 
-/* ===== Toast ===== */
+// ===== Toast
 function showToast(msg, type = "") {
   const t = $("#toast");
   if (!t) return;
@@ -32,7 +40,7 @@ function showToast(msg, type = "") {
   showToast._t = setTimeout(() => (t.style.display = "none"), 2200);
 }
 
-/* ===== Storage ===== */
+// ===== Storage Keys
 const K = {
   salary: "pf_salary",
   saving: "pf_saving",
@@ -42,8 +50,8 @@ const K = {
   exps: "pf_exps",
   one: "pf_one",
   budgets: "pf_budgets",
-  paid: "pf_paid_monthly", // map: { "inst:<id>:YYYY-MM": true }
-  roll: "pf_rollovers", // map: { "YYYY-MM": number }
+  paid: "pf_paid_monthly",
+  roll: "pf_rollovers",
 };
 const getLS = (k, fallbackJSON) => {
   try {
@@ -54,7 +62,25 @@ const getLS = (k, fallbackJSON) => {
 };
 const setLS = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
-/* ===== Common utils ===== */
+// ===== Common (due / paid)
+const withinMonthRange = (start, end, yyyymm) => yyyymm >= ym(start);
+const dueThisMonth = (item, yyyymm) =>
+  withinMonthRange(item.start, item.end, yyyymm) ? Number(item.amount || 0) : 0;
+const isPaid = (kind, id, yyyymm) =>
+  !!getLS(K.paid, "{}")[`${kind}:${id}:${yyyymm}`];
+const setPaid = (kind, id, yyyymm, val) => {
+  const m = getLS(K.paid, "{}");
+  m[`${kind}:${id}:${yyyymm}`] = !!val;
+  setLS(K.paid, m);
+};
+const daysUntilDue = (item, yyyymm) => {
+  const y = +yyyymm.slice(0, 4),
+    m = +yyyymm.slice(5, 7);
+  const last = lastDayOfMonth(y, m);
+  const d = Math.min(item.dueDay || last, last);
+  const due = new Date(y, m - 1, d);
+  return Math.floor((due - new Date()) / 86400000);
+};
 const payLabel = (p) =>
   ({
     cash: "💵 كاش",
@@ -64,102 +90,27 @@ const payLabel = (p) =>
   }[p] ||
   p ||
   "-");
-const lastDayOfMonth = (y, m) => new Date(y, m, 0).getDate();
-// بعد (مستمر للأبد):
-const withinMonthRange = (start, end, yyyymm) => {
-  const s = ym(start);
-  return yyyymm >= s; // تجاهل end نهائيًا
-};
-const dueThisMonth = (item, yyyymm) =>
-  withinMonthRange(item.start, item.end, yyyymm) ? Number(item.amount || 0) : 0;
-const daysUntilDue = (item, yyyymm) => {
-  const y = +yyyymm.slice(0, 4),
-    m = +yyyymm.slice(5, 7);
-  const last = lastDayOfMonth(y, m);
-  const d = Math.min(item.dueDay || last, last);
-  const due = new Date(y, m - 1, d);
-  const one = 86400000;
-  return Math.floor((due - new Date()) / one);
-};
-const prevMonthStr = (yyyymm) => {
-  let [y, m] = yyyymm.split("-").map(Number);
-  m === 1 ? (y--, (m = 12)) : m--;
-  return `${y}-${String(m).padStart(2, "0")}`;
-};
-/* paid map helpers */
-const isPaid = (kind, id, yyyymm) =>
-  !!getLS(K.paid, "{}")[`${kind}:${id}:${yyyymm}`];
-const setPaid = (kind, id, yyyymm, val) => {
-  const m = getLS(K.paid, "{}");
-  m[`${kind}:${id}:${yyyymm}`] = !!val;
-  setLS(K.paid, m);
-};
 
-/* أولوية العرض في الجداول */
-function priorityKey(kind, item, yyyymm) {
-  const dueAmt = dueThisMonth(item, yyyymm);
-  const paid = isPaid(kind, item.id, yyyymm);
-  const d = daysUntilDue(item, yyyymm);
-  let pri;
-  if (dueAmt === 0) pri = 5;
-  else if (paid) pri = 4;
-  else if (d < 0) pri = 0;
-  else if (d <= 3) pri = 1;
-  else pri = 2;
-  const y = +yyyymm.slice(0, 4),
-    m = +yyyymm.slice(5, 7);
-  const last = lastDayOfMonth(y, m);
-  const day = Math.min(item.dueDay || last, last);
-  return [pri, day, item.name || ""];
+// ===== UI LTR numeric for inputs
+function ensureLTRNumeric() {
+  $$('input[type="number"], input[type="date"], input[type="month"]').forEach(
+    (el) => {
+      el.setAttribute("dir", "ltr");
+      el.style.direction = "ltr";
+      if (el.type === "number") el.setAttribute("inputmode", "numeric");
+    }
+  );
+  $("#expAmount")?.setAttribute("inputmode", "decimal");
 }
 
-/* حالة/شيب لعنصر الفواتير/الأقساط في هذا الشهر */
-function statusChip(paid, dueAmt, item, yyyymm) {
-  if (!dueAmt) return `<span class="chip gray">—</span>`;
-  if (paid) return `<span class="chip green">مدفوع</span>`;
-  const curYM = ym(new Date());
-  const d = daysUntilDue(item, yyyymm);
-  if (yyyymm < curYM) return `<span class="chip orange">متأخر</span>`;
-  if (yyyymm > curYM) return `<span class="chip blue">مستقبلي</span>`;
-  if (d < 0) return `<span class="chip orange">متأخر</span>`;
-  if (d <= 3) return `<span class="chip warning">قريب (${d}ي)</span>`;
-  return `<span class="chip">مستحق هذا الشهر</span>`;
-}
-
-/* ===== زر إغلاق المودال ===== */
-document.addEventListener("DOMContentLoaded", () => {
-  const closeBtn = document.getElementById("closeModal");
-  if (closeBtn)
-    closeBtn.onclick = () =>
-      document.getElementById("modal")?.classList.remove("show");
-});
-
-/* ===== بداية التشغيل ===== */
-document.addEventListener("DOMContentLoaded", () => {
-  // defaults
-  $("#monthPicker").value = ym(new Date());
-  $("#expDate").value = today;
-  $("#oneDate").value = today;
-
-  applySavedSettings();
-  bindUI();
-  setupModal();
-  setupCharts();
-  renderAll();
-});
-
-/* ===== إعدادات وثيم ===== */
+// ===== THEME + Settings
 function applySavedSettings() {
-  const salary = +getLS(K.salary, "0");
-  const saving = +getLS(K.saving, "0");
   const st = getLS(K.settings, '{"cash":false,"auto":false,"roll":false}');
-
-  $("#salaryInput").value = salary || "";
-  $("#savingTargetInput").value = saving || "";
+  $("#salaryInput").value = +getLS(K.salary, "0") || "";
+  $("#savingTargetInput").value = +getLS(K.saving, "0") || "";
   $("#cashMode").checked = !!st.cash;
   $("#autoDeduct").checked = !!st.auto;
   $("#rollover").checked = !!st.roll;
-
   const savedTheme = localStorage.getItem("theme");
   if (savedTheme === "light") {
     $("#themeToggle").checked = true;
@@ -177,7 +128,6 @@ function bindUI() {
   });
 
   $("#monthPicker").addEventListener("change", () => {
-    // خصم تلقائي/ترحيل عند تغيير الشهر
     const st = getLS(K.settings, '{"cash":false,"auto":false,"roll":false}');
     const curM = $("#monthPicker").value;
     if (st.auto) autoDeductIfDue(curM);
@@ -206,8 +156,7 @@ function bindUI() {
     renderAll();
   });
 
-  /* ===== النماذج ===== */
-  // الأقساط
+  // Forms
   $("#instForm").addEventListener("submit", (e) => {
     e.preventDefault();
     const name = $("#instName").value.trim();
@@ -215,14 +164,12 @@ function bindUI() {
     const start = $("#instStart").value;
     const end = $("#instEnd").value || null;
     const dueDay = +$("#instDueDay").value || null;
-
     if (!name || !start || !amount)
       return showToast("⚠️ أكمل الحقول (الاسم/المبلغ/البداية)", "warning");
     if (dueDay && (dueDay < 1 || dueDay > 31))
       return showToast("⚠️ يوم الاستحقاق 1–31", "warning");
     if (end && start > end)
       return showToast("⚠️ نهاية المدة قبل بدايتها", "warning");
-
     const L = getLS(K.inst, "[]");
     L.push({
       id: "inst_" + (crypto.randomUUID?.() || Date.now().toString(36)),
@@ -234,13 +181,13 @@ function bindUI() {
     });
     setLS(K.inst, L);
     e.target.reset();
+    ensureLTRNumeric();
     showToast("✅ تمت إضافة القسط", "success");
     renderInst();
     renderKPIs();
     updateAlerts();
   });
 
-  // الفواتير
   $("#billForm").addEventListener("submit", (e) => {
     e.preventDefault();
     const name = $("#billName").value.trim();
@@ -248,14 +195,12 @@ function bindUI() {
     const start = $("#billStart").value;
     const end = $("#billEnd").value || null;
     const dueDay = +$("#billDueDay").value || null;
-
     if (!name || !start || !amount)
       return showToast("⚠️ أكمل الحقول (الاسم/المبلغ/البداية)", "warning");
     if (dueDay && (dueDay < 1 || dueDay > 31))
       return showToast("⚠️ يوم الاستحقاق 1–31", "warning");
     if (end && start > end)
       return showToast("⚠️ نهاية المدة قبل بدايتها", "warning");
-
     const L = getLS(K.bills, "[]");
     L.push({
       id: "bill_" + (crypto.randomUUID?.() || Date.now().toString(36)),
@@ -267,13 +212,13 @@ function bindUI() {
     });
     setLS(K.bills, L);
     e.target.reset();
+    ensureLTRNumeric();
     showToast("✅ تمت إضافة الفاتورة", "success");
     renderBills();
     renderKPIs();
     updateAlerts();
   });
 
-  // المصروفات
   $("#expForm").addEventListener("submit", (e) => {
     e.preventDefault();
     const item = {
@@ -291,6 +236,7 @@ function bindUI() {
     setLS(K.exps, L);
     e.target.reset();
     $("#expDate").value = today;
+    ensureLTRNumeric();
     showToast("✅ تمت إضافة المصروف", "success");
     renderExpenses();
     renderBudgets();
@@ -298,7 +244,6 @@ function bindUI() {
     checkBudgetWarn(item.cat);
   });
 
-  // مصروف خارجي
   $("#oneForm").addEventListener("submit", (e) => {
     e.preventDefault();
     const item = {
@@ -316,24 +261,74 @@ function bindUI() {
     setLS(K.one, L);
     e.target.reset();
     $("#oneDate").value = today;
+    ensureLTRNumeric();
     showToast("✅ تمت إضافة المصروف الخارجي", "success");
     renderOne();
     renderKPIs();
   });
 
-  /* بحث وتصدير */
+  // budgets (إضافة/تحديث)
+  $("#budForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const cat = $("#budCat").value.trim();
+    const limit = +$("#budLimit").value;
+    if (!cat || !limit) return showToast("⚠️ أكمل بيانات الميزانية", "warning");
+    const B = getLS(K.budgets, "[]");
+    const idx = B.findIndex((b) => normCat(b.cat) === normCat(cat));
+    if (idx > -1) {
+      B[idx].limit = limit;
+    } else {
+      B.push({
+        id: "bud_" + (crypto.randomUUID?.() || Date.now().toString(36)),
+        cat,
+        limit,
+      });
+    }
+    setLS(K.budgets, B);
+    e.target.reset();
+    showToast("✅ تم حفظ الميزانية", "success");
+    renderBudgets();
+  });
+
+  // بحث وتصدير
   $("#searchInput").addEventListener("input", renderExpenses);
   $("#exportCSV").addEventListener("click", () =>
     exportCSV($("#monthPicker").value, $("#searchInput").value)
   );
   $("#exportJSON").addEventListener("click", exportJSON);
+
+  // تقارير
+  $("#btnReport")?.addEventListener("click", openDetailedReport);
+  $("#btnCompare")?.addEventListener("click", openCompare);
+
+  // Modal
+  setupModal();
+
+  // اختصار E لفتح المودال
+  document.addEventListener("keydown", (e) => {
+    const isTyping = /^(input|textarea|select)$/i.test(e.target?.tagName);
+    if (!isTyping && e.key.toLowerCase() === "e") {
+      e.preventDefault();
+      $("#openModalBtn")?.click();
+    }
+  });
 }
 
-/* ===== Modal (زر +) ===== */
+// ===== Modal (+)
 function setupModal() {
   const modal = $("#modal");
-  const fab = $(".fab");
-  fab?.addEventListener("click", () => modal.classList.add("show"));
+  const fab = $("#openModalBtn");
+  fab?.addEventListener("click", () => {
+    modal.classList.add("show");
+    ensureLTRNumeric();
+    setTimeout(() => {
+      $("#expForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      $("#expCat")?.focus();
+    }, 50);
+  });
+  $("#closeModal")?.addEventListener("click", () =>
+    modal.classList.remove("show")
+  );
   modal?.addEventListener("click", (e) => {
     if (e.target === modal) modal.classList.remove("show");
   });
@@ -343,7 +338,7 @@ function setupModal() {
   );
 }
 
-/* ===== الحذف/التبديل ===== */
+// ===== Delete / Toggle
 function deleteItem(kind, id) {
   const map = {
     inst: K.inst,
@@ -394,40 +389,14 @@ function togglePaid(kind, id, yyyymm) {
 }
 window.togglePaid = togglePaid;
 
-/* ===== دفع متأخر ===== */
-function payLate(kind, id) {
-  const curM = $("#monthPicker").value;
-  const prev = prevMonthStr(curM);
-  const month = prompt("أدخل الشهر المراد دفعه بصيغة YYYY-MM", prev);
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-    showToast("❌ صيغة غير صحيحة. مثال صحيح: 2025-08", "danger");
-    return;
-  }
-  if (month > curM) {
-    showToast("⚠️ لا يمكن دفع شهر مستقبلي", "warning");
-    return;
-  }
-  setPaid(kind, id, month, true);
-  showToast(`✅ تم تسجيل دفع شهر ${month}`, "success");
-
-  if (kind === "inst") renderInst();
-  else renderBills();
-  renderKPIs();
-  updateAlerts();
-}
-window.payLate = payLate;
-
-/* ===== دفع الشهر السابق (متأخر) ===== */
 function payPrev(kind, id) {
   const curM = $("#monthPicker").value;
   const prevM = prevMonthStr(curM);
   const list = kind === "inst" ? getLS(K.inst, "[]") : getLS(K.bills, "[]");
   const item = list.find((x) => x.id === id);
   if (!item) return;
-
   const prevDue = dueThisMonth(item, prevM);
   const prevPaid = isPaid(kind, id, prevM);
-
   if (prevDue > 0 && !prevPaid) {
     setPaid(kind, id, prevM, true);
     showToast(`✅ تم تسجيل دفع شهر ${prevM}`, "success");
@@ -436,82 +405,102 @@ function payPrev(kind, id) {
     renderKPIs();
     updateAlerts();
   } else {
-    showToast("ℹ️ لا يوجد مبلغ مستحق غير مدفوع في الشهر السابق.", "warning");
+    showToast("ℹ️ لا يوجد مبلغ غير مدفوع للشهر السابق.", "warning");
   }
 }
 window.payPrev = payPrev;
 
-/* ===== Rendering tables ===== */
+// ===== Renderers
+function statusChip(paid, dueAmt, item, yyyymm) {
+  if (!dueAmt) return `<span class="chip gray">—</span>`;
+  if (paid) return `<span class="chip green">مدفوع</span>`;
+  const curYM = ym(new Date());
+  const d = daysUntilDue(item, yyyymm);
+  if (yyyymm < curYM) return `<span class="chip orange">متأخر</span>`;
+  if (yyyymm > curYM) return `<span class="chip blue">مستقبلي</span>`;
+  if (d < 0) return `<span class="chip orange">متأخر</span>`;
+  if (d <= 3) return `<span class="chip warning">قريب (${d}ي)</span>`;
+  return `<span class="chip">مستحق هذا الشهر</span>`;
+}
+function priorityKey(kind, item, yyyymm) {
+  const dueAmt = dueThisMonth(item, yyyymm);
+  const paid = isPaid(kind, item.id, yyyymm);
+  const d = daysUntilDue(item, yyyymm);
+  let pri;
+  if (dueAmt === 0) pri = 5;
+  else if (paid) pri = 4;
+  else if (d < 0) pri = 0;
+  else if (d <= 3) pri = 1;
+  else pri = 2;
+  const y = +yyyymm.slice(0, 4),
+    m = +yyyymm.slice(5, 7),
+    last = lastDayOfMonth(y, m),
+    day = Math.min(item.dueDay || last, last);
+  return [pri, day, item.name || ""];
+}
+
 function renderInst() {
   const curM = $("#monthPicker").value;
   const L = getLS(K.inst, "[]");
   const tbody = $("#instTable tbody");
   tbody.innerHTML = "";
-
   if (!L.length) {
     tbody.innerHTML = `<tr><td colspan="7" class="muted">لا توجد أقساط</td></tr>`;
     return;
   }
-
   L.sort((a, b) => {
     const [pa, da, na] = priorityKey("inst", a, curM);
     const [pb, db, nb] = priorityKey("inst", b, curM);
     return pa - pb || da - db || na.localeCompare(nb);
   });
-
   const nowYM = ym(new Date());
-
   L.forEach((item) => {
     const dueAmt = dueThisMonth(item, curM);
     const paid = isPaid("inst", item.id, curM);
     const status = statusChip(paid, dueAmt, item, curM);
     const y = +curM.slice(0, 4),
-      m = +curM.slice(5, 7);
-    const last = lastDayOfMonth(y, m);
+      m = +curM.slice(5, 7),
+      last = lastDayOfMonth(y, m);
     const dueDay = Math.min(item.dueDay || last, last);
-
-    // الشهر السابق
-    const prevM = prevMonthStr(curM);
-    const prevDue = dueThisMonth(item, prevM);
-    const prevPaid = isPaid("inst", item.id, prevM);
+    const prevM = prevMonthStr(curM),
+      prevDue = dueThisMonth(item, prevM),
+      prevPaid = isPaid("inst", item.id, prevM);
     const canPayPrev = prevDue > 0 && !prevPaid;
-
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${item.name}</td>
-      <td class="fit">${fmt(item.amount)}</td>
-      <td class="fit">${item.start}${item.end ? ` → ${item.end}` : ""}</td>
-      <td class="fit">${dueDay}</td>
-      <td class="fit">${fmt(dueAmt)}</td>
-      <td class="fit">${status}</td>
-      <td class="fit">
+      <td data-label="الاسم">${item.name}</td>
+      <td data-label="المبلغ" class="fit">${fmt(item.amount)}</td>
+      <td data-label="المدى" class="fit">${item.start}${
+      item.end ? ` → ${item.end}` : ""
+    }</td>
+      <td data-label="يوم الاستحقاق" class="fit">${dueDay}</td>
+      <td data-label="استحقاق هذا الشهر" class="fit">${fmt(dueAmt)}</td>
+      <td data-label="الحالة" class="fit">${status}</td>
+      <td data-label="الإجراءات" class="fit">
         <div class="flex gap-2">
           ${
             dueAmt > 0
-              ? `<button class="btn ${paid ? "ghost" : "primary"}"
-                   onclick="togglePaid('inst','${item.id}','${curM}')">
-                   ${
-                     paid
-                       ? "إلغاء الدفع"
-                       : curM < nowYM
-                       ? "دفع هذا الشهر (متأخر)"
-                       : "تحديد كمدفوع"
-                   }
-                 </button>`
+              ? `<button class="btn ${
+                  paid ? "ghost" : "primary"
+                }" onclick="togglePaid('inst','${item.id}','${curM}')">${
+                  paid
+                    ? "إلغاء الدفع"
+                    : curM < nowYM
+                    ? "دفع هذا الشهر (متأخر)"
+                    : "تحديد كمدفوع"
+                }</button>`
               : ""
           }
           ${
             canPayPrev
-              ? `<button class="btn warning" title="تسجيل دفع الشهر السابق (${prevM})"
-                   onclick="payPrev('inst','${item.id}')">دفع متأخر (${prevM})</button>`
+              ? `<button class="btn warning" title="تسجيل دفع الشهر السابق (${prevM})" onclick="payPrev('inst','${item.id}')">دفع متأخر (${prevM})</button>`
               : ""
           }
           <button class="btn danger" onclick="deleteItem('inst','${
             item.id
           }')">حذف</button>
         </div>
-      </td>
-    `;
+      </td>`;
     tbody.appendChild(tr);
   });
 }
@@ -521,70 +510,63 @@ function renderBills() {
   const L = getLS(K.bills, "[]");
   const tbody = $("#billTable tbody");
   tbody.innerHTML = "";
-
   if (!L.length) {
     tbody.innerHTML = `<tr><td colspan="7" class="muted">لا توجد فواتير</td></tr>`;
     return;
   }
-
   L.sort((a, b) => {
     const [pa, da, na] = priorityKey("bills", a, curM);
     const [pb, db, nb] = priorityKey("bills", b, curM);
     return pa - pb || da - db || na.localeCompare(nb);
   });
-
   const nowYM = ym(new Date());
-
   L.forEach((item) => {
     const dueAmt = dueThisMonth(item, curM);
     const paid = isPaid("bills", item.id, curM);
     const status = statusChip(paid, dueAmt, item, curM);
     const y = +curM.slice(0, 4),
-      m = +curM.slice(5, 7);
-    const last = lastDayOfMonth(y, m);
-    const dueDay = Math.min(item.dueDay || last, last);
-
-    const prevM = prevMonthStr(curM);
-    const prevDue = dueThisMonth(item, prevM);
-    const prevPaid = isPaid("bills", item.id, prevM);
+      m = +curM.slice(5, 7),
+      last = lastDayOfMonth(y, m);
+    const dday = Math.min(item.dueDay || last, last);
+    const prevM = prevMonthStr(curM),
+      prevDue = dueThisMonth(item, prevM),
+      prevPaid = isPaid("bills", item.id, prevM);
     const canPayPrev = prevDue > 0 && !prevPaid;
-
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${item.name}</td>
-      <td class="fit">${fmt(item.amount)}</td>
-      <td class="fit">${item.start}${item.end ? ` → ${item.end}` : ""}</td>
-      <td class="fit">${dueDay}</td>
-      <td class="fit">${fmt(dueAmt)}</td>
-      <td class="fit">${status}</td>
-      <td class="fit">
+      <td data-label="الاسم">${item.name}</td>
+      <td data-label="المبلغ" class="fit">${fmt(item.amount)}</td>
+      <td data-label="المدى" class="fit">${item.start}${
+      item.end ? ` → ${item.end}` : ""
+    }</td>
+      <td data-label="يوم الاستحقاق" class="fit">${dday}</td>
+      <td data-label="استحقاق هذا الشهر" class="fit">${fmt(dueAmt)}</td>
+      <td data-label="الحالة" class="fit">${status}</td>
+      <td data-label="الإجراءات" class="fit">
         <div class="flex gap-2">
           ${
             dueAmt > 0
-              ? `<button class="btn ${paid ? "ghost" : "primary"}"
-                   onclick="togglePaid('bills','${item.id}','${curM}')">
-                   ${
-                     paid
-                       ? "إلغاء الدفع"
-                       : curM < nowYM
-                       ? "دفع هذا الشهر (متأخر)"
-                       : "تحديد كمدفوع"
-                   }
-                 </button>`
+              ? `<button class="btn ${
+                  paid ? "ghost" : "primary"
+                }" onclick="togglePaid('bills','${item.id}','${curM}')">${
+                  paid
+                    ? "إلغاء الدفع"
+                    : curM < nowYM
+                    ? "دفع هذا الشهر (متأخر)"
+                    : "تحديد كمدفوع"
+                }</button>`
               : ""
           }
           ${
             canPayPrev
-              ? `<button class="btn warning" title="تسجيل دفع الشهر السابق (${prevM})"
-                   onclick="payPrev('bills','${item.id}')">دفع متأخر (${prevM})</button>`
+              ? `<button class="btn warning" title="تسجيل دفع الشهر السابق (${prevM})" onclick="payPrev('bills','${item.id}')">دفع متأخر (${prevM})</button>`
               : ""
           }
           <button class="btn danger" onclick="deleteItem('bills','${
             item.id
           }')">حذف</button>
         </div>
-      </td>
-    `;
+      </td>`;
     tbody.appendChild(tr);
   });
 }
@@ -599,11 +581,9 @@ function renderExpenses() {
         (!q || normCat(x.cat).includes(q) || normCat(x.note).includes(q))
     )
     .sort((a, b) => a.date.localeCompare(b.date));
-
   const tbody = $("#expTable tbody");
   tbody.innerHTML = "";
   let total = 0;
-
   if (!L.length) {
     tbody.innerHTML = `<tr><td colspan="6" class="muted">لا توجد مصروفات</td></tr>`;
   } else {
@@ -611,17 +591,16 @@ function renderExpenses() {
       total += Number(item.amount || 0);
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${item.date}</td>
-        <td><span class="chip blue">${item.cat}</span></td>
-        <td>${item.note || "-"}</td>
-        <td class="fit">${payLabel(item.pay)}</td>
-        <td class="fit">${fmt(item.amount)}</td>
-        <td class="fit">
+        <td data-label="التاريخ">${item.date}</td>
+        <td data-label="التصنيف"><span class="chip blue">${item.cat}</span></td>
+        <td data-label="الوصف">${item.note || "-"}</td>
+        <td data-label="الدفع" class="fit">${payLabel(item.pay)}</td>
+        <td data-label="المبلغ" class="fit">${fmt(item.amount)}</td>
+        <td data-label="الإجراءات" class="fit">
           <button class="btn danger" onclick="deleteItem('exps','${
             item.id
           }')">حذف</button>
-        </td>
-      `;
+        </td>`;
       tbody.appendChild(tr);
     });
   }
@@ -635,7 +614,6 @@ function renderOne() {
     .sort((a, b) => a.date.localeCompare(b.date));
   const tbody = $("#oneTable tbody");
   tbody.innerHTML = "";
-
   if (!L.length) {
     tbody.innerHTML = `<tr><td colspan="6" class="muted">لا توجد مصاريف خارجية</td></tr>`;
     return;
@@ -643,26 +621,25 @@ function renderOne() {
   L.forEach((item) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${item.date}</td>
-      <td>${item.cat}</td>
-      <td>${item.note || "-"}</td>
-      <td class="fit">${fmt(item.amount)}</td>
-      <td class="fit"><span class="chip ${item.paid ? "green" : "orange"}">${
-      item.paid ? "مدفوع" : "غير مدفوع"
-    }</span></td>
-      <td class="fit">
+      <td data-label="التاريخ">${item.date}</td>
+      <td data-label="النوع">${item.cat}</td>
+      <td data-label="ملاحظة">${item.note || "-"}</td>
+      <td data-label="المبلغ" class="fit">${fmt(item.amount)}</td>
+      <td data-label="الحالة" class="fit"><span class="chip ${
+        item.paid ? "green" : "orange"
+      }">${item.paid ? "مدفوع" : "غير مدفوع"}</span></td>
+      <td data-label="الإجراءات" class="fit">
         <div class="flex gap-2">
           <button class="btn ${
             item.paid ? "ghost" : "primary"
-          }" onclick="togglePaid('one','${item.id}','${curM}')">
-            ${item.paid ? "إلغاء الدفع" : "تحديد كمدفوع"}
-          </button>
+          }" onclick="togglePaid('one','${item.id}','${curM}')">${
+      item.paid ? "إلغاء الدفع" : "تحديد كمدفوع"
+    }</button>
           <button class="btn danger" onclick="deleteItem('one','${
             item.id
           }')">حذف</button>
         </div>
-      </td>
-    `;
+      </td>`;
     tbody.appendChild(tr);
   });
 }
@@ -685,44 +662,37 @@ function renderBudgets() {
     const status = pct >= 100 ? "danger" : pct >= 80 ? "warning" : "green";
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><span class="chip blue">${b.cat}</span></td>
-      <td class="fit">${fmt(b.limit)}</td>
-      <td class="fit">${fmt(spent)}</td>
-      <td class="fit">
+      <td data-label="التصنيف"><span class="chip blue">${b.cat}</span></td>
+      <td data-label="الحد المحدد" class="fit">${fmt(b.limit)}</td>
+      <td data-label="المصروف الحالي" class="fit">${fmt(spent)}</td>
+      <td data-label="النسبة المستخدمة" class="fit">
         <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(
           pct,
           100
         )}%"></div></div>
         <span class="chip ${status}">${pct.toFixed(1)}%</span>
       </td>
-      <td class="fit"><button class="btn danger" onclick="deleteItem('budgets','${
+      <td data-label="الإجراءات" class="fit"><button class="btn danger" onclick="deleteItem('budgets','${
         b.id || b.cat
-      }')">حذف</button></td>
-    `;
+      }')">حذف</button></td>`;
     tbody.appendChild(tr);
   });
 }
 
-/* ===== KPIs + Summary ===== */
+// ===== KPIs + Month Summary
 function renderKPIs() {
   const curM = $("#monthPicker").value;
   const salary = +getLS(K.salary, "0");
   const savingTarget = +getLS(K.saving, "0");
   const st = getLS(K.settings, '{"cash":false,"auto":false,"roll":false}');
 
-  const inst = getLS(K.inst, "[]");
-  const bills = getLS(K.bills, "[]");
-  const exps = getLS(K.exps, "[]")
-    .filter((x) => ym(x.date) === curM)
-    .reduce((s, x) => s + Number(x.amount || 0), 0);
-  const ones = getLS(K.one, "[]")
-    .filter((x) => ym(x.date) === curM && (!st.cash || x.paid))
-    .reduce((s, x) => s + Number(x.amount || 0), 0);
+  const instList = getLS(K.inst, "[]");
+  const billsList = getLS(K.bills, "[]");
 
   let instTotal = 0,
     billsTotal = 0;
-  [...inst, ...bills].forEach((item) => {
-    const kind = inst.includes(item) ? "inst" : "bills";
+  [...instList, ...billsList].forEach((item) => {
+    const kind = instList.includes(item) ? "inst" : "bills"; // ملاحظة: هذا يعتمد على نفس مرجع المصفوفة
     const dueAmt = dueThisMonth(item, curM);
     if (dueAmt > 0) {
       const paid = isPaid(kind, item.id, curM);
@@ -733,8 +703,13 @@ function renderKPIs() {
     }
   });
 
-  const rollMap = getLS(K.roll, "{}");
-  const carry = Number(rollMap[curM] || 0);
+  const exps = getLS(K.exps, "[]")
+    .filter((x) => ym(x.date) === curM)
+    .reduce((s, x) => s + Number(x.amount || 0), 0);
+  const ones = getLS(K.one, "[]")
+    .filter((x) => ym(x.date) === curM && (!st.cash || x.paid))
+    .reduce((s, x) => s + Number(x.amount || 0), 0);
+  const carry = Number(getLS(K.roll, "{}")[curM] || 0);
 
   const totalOut = instTotal + billsTotal + exps + ones + carry;
   const actualSaving = salary - totalOut;
@@ -748,12 +723,9 @@ function renderKPIs() {
     ? Math.min(100, (savingTarget / salary) * 100) + "%"
     : "0%";
 
-  // جدول الملخص
   const table = $("#monthSummary");
   table.innerHTML = `
-    <thead>
-      <tr><th>البند</th><th class="fit">المبلغ</th><th class="fit">النسبة من الدخل</th></tr>
-    </thead>
+    <thead><tr><th>البند</th><th class="fit">المبلغ</th><th class="fit">النسبة من الدخل</th></tr></thead>
     <tbody>
       <tr><td>💰 إجمالي الدخل</td><td class="fit font-bold">${fmt(
         salary
@@ -789,7 +761,7 @@ function renderKPIs() {
     salary ? ((totalOut / salary) * 100).toFixed(1) : 0
   }%</td></tr>
       <tr><td class="font-bold">🏦 الادخار الفعلي</td><td class="fit font-bold" style="color:${
-        actualSaving >= 0 ? "var(--accent-2)" : "var(--danger)"
+        actualSaving >= 0 ? "var(--success)" : "var(--danger)"
       }">${fmt(actualSaving)}</td><td class="fit">${
     salary ? ((actualSaving / salary) * 100).toFixed(1) : 0
   }%</td></tr>
@@ -799,17 +771,15 @@ function renderKPIs() {
     salary ? ((savingTarget / salary) * 100).toFixed(1) : 0
   }%</td></tr>
       <tr><td class="font-bold">💵 الصافي المتبقي</td><td class="fit font-bold" style="color:${
-        net >= 0 ? "var(--accent-2)" : "var(--danger)"
+        net >= 0 ? "var(--success)" : "var(--danger)"
       }">${fmt(net)}</td><td class="fit">—</td></tr>
-    </tbody>
-  `;
+    </tbody>`;
 }
 
-/* ===== Charts ===== */
+// ===== Charts
 let monthlyChart, breakdownChart;
 function setupCharts() {
   if (typeof Chart === "undefined") return;
-
   Chart.defaults.font.family = `'Tajawal', system-ui, -apple-system, 'Segoe UI'`;
   Chart.defaults.color =
     getComputedStyle(document.documentElement).getPropertyValue("--ink") ||
@@ -877,25 +847,20 @@ function setupCharts() {
   }
   refreshCharts();
 }
-
 function refreshCharts() {
   if (!monthlyChart || !breakdownChart) return;
-
   const curM = $("#monthPicker").value;
-
-  // 6 أشهر سابقة حتى الحالي — إنشاء تاريخ محلي آمن
+  // آخر 6 أشهر
   const labels = [],
     incomeData = [],
     expenseData = [];
   const [cy, cm] = curM.split("-").map(Number);
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(cy, cm - 1 - i, 1); // محلي
+    const d = new Date(cy, cm - 1 - i, 1);
     const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     labels.push(m);
-
     const salary = +getLS(K.salary, "0");
     incomeData.push(salary);
-
     const inst = getLS(K.inst, "[]").reduce(
       (s, it) => s + dueThisMonth(it, m),
       0
@@ -918,37 +883,33 @@ function refreshCharts() {
   monthlyChart.data.datasets[1].data = expenseData;
   monthlyChart.update();
 
-  // Breakdown للشهر الحالي حسب التصنيف (تجميع مع تطبيع الاسم)
   const exps = getLS(K.exps, "[]").filter((x) => ym(x.date) === curM);
   const map = {};
-  exps.forEach(
-    (e) =>
-      (map[normCat(e.cat)] = (map[normCat(e.cat)] || 0) + Number(e.amount || 0))
-  );
+  exps.forEach((e) => {
+    const k = normCat(e.cat);
+    map[k] = (map[k] || 0) + Number(e.amount || 0);
+  });
   breakdownChart.data.labels = Object.keys(map);
   breakdownChart.data.datasets[0].data = Object.values(map);
   breakdownChart.update();
 }
 
-/* ===== Alerts / Auto / Rollover ===== */
+// ===== Alerts + Auto + Rollover
 function updateAlerts() {
   const curM = $("#monthPicker").value;
   const alerts = [];
-  const inst = getLS(K.inst, "[]");
-  const bills = getLS(K.bills, "[]");
-
-  inst.forEach((item) => {
-    const dueAmt = dueThisMonth(item, curM);
-    if (dueAmt > 0 && !isPaid("inst", item.id, curM)) {
+  getLS(K.inst, "[]").forEach((item) => {
+    const due = dueThisMonth(item, curM);
+    if (due > 0 && !isPaid("inst", item.id, curM)) {
       const d = daysUntilDue(item, curM);
       if (d >= 0 && d <= 3)
         alerts.push(`⏰ ${item.name} (قسط) مستحق خلال ${d} يومًا.`);
       if (d < 0) alerts.push(`⚠️ ${item.name} (قسط) متأخر الدفع.`);
     }
   });
-  bills.forEach((item) => {
-    const dueAmt = dueThisMonth(item, curM);
-    if (dueAmt > 0 && !isPaid("bills", item.id, curM)) {
+  getLS(K.bills, "[]").forEach((item) => {
+    const due = dueThisMonth(item, curM);
+    if (due > 0 && !isPaid("bills", item.id, curM)) {
       const d = daysUntilDue(item, curM);
       if (d >= 0 && d <= 3)
         alerts.push(`⏰ ${item.name} (فاتورة) مستحقة خلال ${d} يومًا.`);
@@ -966,7 +927,6 @@ function updateAlerts() {
     badge.style.display = "none";
   }
 }
-
 function autoDeductIfDue(yyyymm) {
   const cur = ym(new Date());
   if (cur !== yyyymm) return;
@@ -979,14 +939,13 @@ function autoDeductIfDue(yyyymm) {
     }
   });
 }
-
 function rolloverArrears(yyyymm) {
   const prev = prevMonthStr(yyyymm);
   let total = 0;
   [...getLS(K.inst, "[]"), ...getLS(K.bills, "[]")].forEach((item) => {
     const kind = getLS(K.inst, "[]").includes(item) ? "inst" : "bills";
-    const dueAmt = dueThisMonth(item, prev);
-    if (dueAmt > 0 && !isPaid(kind, item.id, prev)) total += dueAmt;
+    const due = dueThisMonth(item, prev);
+    if (due > 0 && !isPaid(kind, item.id, prev)) total += due;
   });
   const R = getLS(K.roll, "{}");
   R[yyyymm] = total;
@@ -998,7 +957,7 @@ function rolloverArrears(yyyymm) {
     );
 }
 
-/* ===== Export ===== */
+// ===== Export
 function exportCSV(month, search = "") {
   const rows = getLS(K.exps, "[]").filter(
     (x) =>
@@ -1022,7 +981,6 @@ function exportCSV(month, search = "") {
   a.click();
   showToast("✅ تم تصدير CSV", "success");
 }
-
 function exportJSON() {
   const data = {
     salary: getLS(K.salary, "0"),
@@ -1045,23 +1003,128 @@ function exportJSON() {
   showToast("✅ تم تصدير JSON", "success");
 }
 
-/* ===== Master render ===== */
-function renderAll() {
-  renderInst();
-  renderBills();
-  renderExpenses();
-  renderOne();
-  renderBudgets();
-  renderKPIs();
-  refreshCharts();
-  updateAlerts();
+// ===== Budget warning
+function checkBudgetWarn(catRaw) {
+  const curM = $("#monthPicker").value,
+    cat = normCat(catRaw);
+  const B = getLS(K.budgets, "[]");
+  const budget = B.find((b) => normCat(b.cat) === cat);
+  if (!budget) return;
+  const spent = getLS(K.exps, "[]")
+    .filter((x) => ym(x.date) === curM && normCat(x.cat) === cat)
+    .reduce((s, x) => s + Number(x.amount || 0), 0);
+  if (!budget.limit) return;
+  const used = (spent / budget.limit) * 100;
+  if (used >= 100)
+    showToast(
+      `🚫 تجاوزت ميزانية "${budget.cat}" (${used.toFixed(0)}%)`,
+      "danger"
+    );
+  else if (used >= 80)
+    showToast(
+      `⚠️ اقتربت من ميزانية "${budget.cat}" (${used.toFixed(0)}%)`,
+      "warning"
+    );
 }
 
-// ===== helpers للحساب لشهر معيّن =====
+// ===== Router (hash)
+const ROUTES = [
+  "summary",
+  "installments",
+  "bills",
+  "expenses",
+  "one-time",
+  "settings",
+];
+const sections = Array.from(document.querySelectorAll("[data-route]"));
+const navLinks = Array.from(
+  document.querySelectorAll(".bottom-nav .nav-links a")
+);
+const fabBtn = document.getElementById("openModalBtn");
+const stateKey = (r) => `moneyapp_state_${r}`;
+const scrollKey = (r) => `moneyapp_scroll_${r}`;
+let currentRoute = null;
+
+function applyActive(r) {
+  navLinks.forEach((a) => {
+    const hash = a.getAttribute("href").replace("#", "");
+    a.classList.toggle("active", hash === r);
+  });
+}
+function fabConfig(route) {
+  const map = {
+    installments: {
+      label: "＋",
+      title: "إضافة قسط",
+      action: () => openForm("instForm"),
+    },
+    bills: {
+      label: "＋",
+      title: "إضافة فاتورة",
+      action: () => openForm("billForm"),
+    },
+    expenses: {
+      label: "＋",
+      title: "إضافة مصروف",
+      action: () => openForm("expForm"),
+    },
+    "one-time": {
+      label: "＋",
+      title: "مصروف خارجي",
+      action: () => openForm("oneForm"),
+    },
+    summary: {
+      label: "＋",
+      title: "إضافة سريعة",
+      action: () => openQuickAdd(),
+    },
+    settings: {
+      label: "＋",
+      title: "اختصار سريع",
+      action: () => openQuickAdd(),
+    },
+  };
+  return map[route] || map.summary;
+}
+function showRoute(r) {
+  if (!ROUTES.includes(r)) r = "summary";
+  if (currentRoute) {
+    localStorage.setItem(scrollKey(currentRoute), String(window.scrollY || 0));
+  }
+  sections.forEach(
+    (s) => (s.style.display = s.dataset.route === r ? "" : "none")
+  );
+  applyActive(r);
+  currentRoute = r;
+
+  const cfg = fabConfig(r);
+  if (fabBtn) {
+    fabBtn.textContent = cfg.label;
+    fabBtn.setAttribute("aria-label", cfg.title);
+    fabBtn.onclick = cfg.action;
+  }
+
+  const prev = Number(localStorage.getItem(scrollKey(r) || "0")) || 0;
+  window.scrollTo({ top: prev, behavior: "instant" });
+}
+function onHash() {
+  showRoute((location.hash || "#summary").slice(1));
+}
+function openForm(id) {
+  $("#openModalBtn").click();
+  setTimeout(
+    () => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }),
+    60
+  );
+}
+function openQuickAdd() {
+  $("#openModalBtn").click();
+}
+
+// ===== Detailed Report
 function totalsForMonth(yyyymm) {
   const salary = +getLS(K.salary, "0");
   const st = getLS(K.settings, '{"cash":false,"auto":false,"roll":false}');
-
   const inst = getLS(K.inst, "[]").reduce(
     (s, it) => s + dueThisMonth(it, yyyymm),
     0
@@ -1070,33 +1133,25 @@ function totalsForMonth(yyyymm) {
     (s, it) => s + dueThisMonth(it, yyyymm),
     0
   );
-
   const exps = getLS(K.exps, "[]")
     .filter((x) => ym(x.date) === yyyymm)
     .reduce((s, x) => s + Number(x.amount || 0), 0);
-
   const ones = getLS(K.one, "[]")
     .filter((x) => ym(x.date) === yyyymm && (!st.cash || x.paid))
     .reduce((s, x) => s + Number(x.amount || 0), 0);
-
   const carry = Number(getLS(K.roll, "{}")[yyyymm] || 0);
-
   const out = inst + bills + exps + ones + carry;
   const saveActual = salary - out;
-
   return { salary, inst, bills, exps, ones, carry, out, saveActual };
 }
-function pct(n, d) {
+function fmtPct(n, d) {
   return d ? ((n / d) * 100).toFixed(1) : "0.0";
 }
 
-// ===== تقرير مفصّل للشهر الحالي =====
 function openDetailedReport() {
   const m = $("#monthPicker").value;
   const t = totalsForMonth(m);
   const now = new Date();
-
-  // تفصيل المصروفات حسب التصنيف (تجميع بعد التطبيع)
   const byCat = {};
   getLS(K.exps, "[]")
     .filter((x) => ym(x.date) === m)
@@ -1104,44 +1159,34 @@ function openDetailedReport() {
       const k = normCat(e.cat);
       byCat[k] = (byCat[k] || 0) + Number(e.amount || 0);
     });
-
-  let rows = "";
-  Object.entries(byCat)
+  let rows = Object.entries(byCat)
     .sort((a, b) => b[1] - a[1])
-    .forEach(([catKey, amt]) => {
-      rows += `<tr><td>${catKey}</td><td class="fit">${fmt(
-        amt
-      )}</td><td class="fit">${pct(amt, t.salary)}%</td></tr>`;
-    });
+    .map(
+      ([catKey, amt]) =>
+        `<tr><td>${catKey}</td><td class="fit">${fmt(
+          amt
+        )}</td><td class="fit">${fmtPct(amt, t.salary)}%</td></tr>`
+    )
+    .join("");
   if (!rows)
     rows = `<tr><td colspan="3" class="muted">لا توجد مصروفات بعد.</td></tr>`;
-
   const html = `
-  <html lang="ar" dir="rtl">
-  <head>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <title>التقرير المالي المفصّل ${m}</title>
-    <style>
-      body{background:#0b1220;color:#e7ecf3;font-family:'Tajawal',system-ui;margin:24px}
-      .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:16px 0}
-      .card{padding:16px;border-radius:14px;background:#101827;border:1px solid #1f2937;text-align:center}
-      .ok{color:#22c55e}.bad{color:#ef4444}
-      table{width:100%;border-collapse:collapse;margin-top:16px}
-      th,td{border-bottom:1px solid #1f2937;padding:10px}
-      .fit{white-space:nowrap}
-      .muted{opacity:.7}
-      h1{margin:0 0 6px}
-      .section-title{margin-top:22px}
-      .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#111827;border:1px solid #1f2937;font-size:12px}
-    </style>
-  </head>
-  <body>
+  <html lang="ar" dir="rtl"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>التقرير المالي المفصّل ${m}</title>
+  <style>
+    body{background:#0b1220;color:#e7ecf3;font-family:'Tajawal',system-ui;margin:24px}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:16px 0}
+    .card{padding:16px;border-radius:14px;background:#101827;border:1px solid #1f2937;text-align:center}
+    .ok{color:#22c55e}.bad{color:#ef4444}
+    table{width:100%;border-collapse:collapse;margin-top:16px}
+    th,td{border-bottom:1px solid #1f2937;padding:10px}
+    .fit{white-space:nowrap}.muted{opacity:.7} h1{margin:0 0 6px} .section-title{margin-top:22px}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#111827;border:1px solid #1f2937;font-size:12px}
+  </style></head><body>
     <h1>📊 التقرير المالي المفصّل</h1>
     <div class="muted">شهر ${m} — تم إنشاؤه في ${now.toLocaleString(
     "ar-SA"
   )}</div>
-
     <div class="cards">
       <div class="card"><div>إجمالي الدخل</div><div class="ok" style="font-size:24px">${fmt(
         t.salary
@@ -1158,66 +1203,47 @@ function openDetailedReport() {
     t.bills
   )}</div></div>
     </div>
-
     <h2 class="section-title">تفصيل المصروفات حسب التصنيف</h2>
-    <table>
-      <thead><tr><th>الفئة</th><th class="fit">المبلغ</th><th class="fit">النسبة من الدخل</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-
+    <table><thead><tr><th>الفئة</th><th class="fit">المبلغ</th><th class="fit">النسبة من الدخل</th></tr></thead><tbody>${rows}</tbody></table>
     <h2 class="section-title">معلومات إضافية</h2>
     <div class="pill">المصاريف الخارجيّة: ${fmt(t.ones)}</div>
     <div class="pill">متأخرات مُرحّلة: ${fmt(t.carry)}</div>
   </body></html>`;
-
   const w = window.open("about:blank");
   w.document.write(html);
   w.document.close();
 }
-
-// ===== مقارنة شهرين: الحالي مقابل السابق =====
 function openCompare() {
   const cur = $("#monthPicker").value;
   const prev = prevMonthStr(cur);
-
   const a = totalsForMonth(prev);
   const b = totalsForMonth(cur);
-
-  function row(label, va, vb) {
+  const row = (label, va, vb) => {
     const diff = vb - va;
     const sign = diff === 0 ? "" : diff > 0 ? "▲" : "▼";
     const color = diff > 0 ? "#ef4444" : diff < 0 ? "#22c55e" : "#9ca3af";
-    return `
-      <tr>
-        <td>${label}</td>
-        <td class="fit">${fmt(va)}</td>
-        <td class="fit">${fmt(vb)}</td>
-        <td class="fit" style="color:${color}">${fmt(diff)} ${sign}</td>
-      </tr>`;
-  }
-
+    return `<tr><td>${label}</td><td class="fit">${fmt(
+      va
+    )}</td><td class="fit">${fmt(
+      vb
+    )}</td><td class="fit" style="color:${color}">${fmt(
+      diff
+    )} ${sign}</td></tr>`;
+  };
   const html = `
-  <html lang="ar" dir="rtl">
-  <head>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <title>مقارنة الأشهر ${cur} مقابل ${prev}</title>
-    <style>
-      body{background:#0b1220;color:#e7ecf3;font-family:'Tajawal',system-ui;margin:24px}
-      h1{margin:0 0 14px}
-      .muted{opacity:.7}
-      table{width:100%;border-collapse:collapse;margin-top:16px}
-      th,td{border-bottom:1px solid #1f2937;padding:10px}
-      .fit{white-space:nowrap}
-      .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:16px 0}
-      .card{padding:16px;border-radius:14px;background:#101827;border:1px solid #1f2937}
-      .ok{color:#22c55e}.bad{color:#ef4444}
-    </style>
-  </head>
-  <body>
+  <html lang="ar" dir="rtl"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>مقارنة الأشهر ${cur} مقابل ${prev}</title>
+  <style>
+    body{background:#0b1220;color:#e7ecf3;font-family:'Tajawal',system-ui;margin:24px}
+    h1{margin:0 0 14px}.muted{opacity:.7}
+    table{width:100%;border-collapse:collapse;margin-top:16px} th,td{border-bottom:1px solid #1f2937;padding:10px}
+    .fit{white-space:nowrap}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:16px 0}
+    .card{padding:16px;border-radius:14px;background:#101827;border:1px solid #1f2937}
+    .ok{color:#22c55e}.bad{color:#ef4444}
+  </style></head><body>
     <h1>📈 مقارنة الأشهر</h1>
     <div class="muted">${prev} مقابل ${cur}</div>
-
     <div class="cards">
       <div class="card"><div>ادخار فعلي (السابق)</div><div class="${
         a.saveActual >= 0 ? "ok" : "bad"
@@ -1232,7 +1258,6 @@ function openCompare() {
         b.out
       )}</div></div>
     </div>
-
     <table>
       <thead><tr><th>البند</th><th class="fit">${prev}</th><th class="fit">${cur}</th><th class="fit">الفرق</th></tr></thead>
       <tbody>
@@ -1245,38 +1270,33 @@ function openCompare() {
       </tbody>
     </table>
   </body></html>`;
-
   const w = window.open("about:blank");
   w.document.write(html);
   w.document.close();
 }
 
-// اربط الأزرار
+// ===== Boot
 document.addEventListener("DOMContentLoaded", () => {
-  $("#btnReport")?.addEventListener("click", openDetailedReport);
-  $("#btnCompare")?.addEventListener("click", openCompare);
+  $("#monthPicker").value = ym(new Date());
+  $("#expDate").value = today;
+  $("#oneDate").value = today;
+  ensureLTRNumeric();
+  applySavedSettings();
+  bindUI();
+  renderAll();
+  setupCharts();
+  window.addEventListener("hashchange", onHash);
+  onHash(); // أظهر الصفحة الصحيحة
 });
 
-// فتح المودال والتركيز مباشرة على "إضافة مصروف"
-document.getElementById('openModalBtn')?.addEventListener('click', () => {
-  const modal = document.getElementById('modal');
-  modal?.classList.add('show');
-  setTimeout(() => {
-    document.getElementById('expForm')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    document.getElementById('expCat')?.focus();
-  }, 50);
-});
-
-// زر الإغلاق يبقى كما هو
-document.getElementById('closeModal')?.addEventListener('click', () => {
-  document.getElementById('modal')?.classList.remove('show');
-});
-
-// اختصار سريع: اضغط حرف e من أي مكان لإضافة مصروف بسرعة
-document.addEventListener('keydown', (e) => {
-  const isTyping = /^(input|textarea|select)$/i.test(e.target?.tagName);
-  if (!isTyping && e.key.toLowerCase() === 'e') {
-    e.preventDefault();
-    document.getElementById('openModalBtn')?.click();
-  }
-});
+// ===== Master render
+function renderAll() {
+  renderInst();
+  renderBills();
+  renderExpenses();
+  renderOne();
+  renderBudgets();
+  renderKPIs();
+  refreshCharts();
+  updateAlerts();
+}
