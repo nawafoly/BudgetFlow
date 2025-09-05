@@ -18,10 +18,8 @@ const normCat = (s) => (s || "").toString().trim().toLowerCase();
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const today = new Date().toISOString().slice(0, 10);
-
-// ✅ الأرقام بالإنجليزية
 const fmt = (n) =>
-  Number(n || 0).toLocaleString("en", { maximumFractionDigits: 0 }) + " ر.س";
+  Number(n || 0).toLocaleString("ar-EG", { maximumFractionDigits: 0 }) + " ر.س";
 
 /* ===== Toast ===== */
 function showToast(msg, type = "") {
@@ -127,6 +125,14 @@ function statusChip(paid, dueAmt, item, yyyymm) {
   if (d <= 3) return `<span class="chip warning">قريب (${d}ي)</span>`;
   return `<span class="chip">مستحق هذا الشهر</span>`;
 }
+
+/* ===== زر إغلاق المودال ===== */
+document.addEventListener("DOMContentLoaded", () => {
+  const closeBtn = document.getElementById("closeModal");
+  if (closeBtn)
+    closeBtn.onclick = () =>
+      document.getElementById("modal")?.classList.remove("show");
+});
 
 /* ===== بداية التشغيل ===== */
 document.addEventListener("DOMContentLoaded", () => {
@@ -315,31 +321,6 @@ function bindUI() {
     renderKPIs();
   });
 
-  // ✅ الميزانيات (إضافة/تحديث)
-  $("#budForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const cat = $("#budCat").value.trim();
-    const limit = Number($("#budLimit").value || 0);
-    if (!cat || !limit)
-      return showToast("⚠️ أدخل التصنيف والحد الأعلى", "warning");
-
-    const L = getLS(K.budgets, "[]");
-    const i = L.findIndex((b) => normCat(b.cat) === normCat(cat));
-    if (i > -1) {
-      L[i].limit = limit;
-    } else {
-      L.push({
-        id: "bud_" + (crypto.randomUUID?.() || Date.now().toString(36)),
-        cat,
-        limit,
-      });
-    }
-    setLS(K.budgets, L);
-    e.target.reset();
-    showToast("✅ تم حفظ الميزانية", "success");
-    renderBudgets();
-  });
-
   /* بحث وتصدير */
   $("#searchInput").addEventListener("input", renderExpenses);
   $("#exportCSV").addEventListener("click", () =>
@@ -504,7 +485,7 @@ function renderInst() {
       <td class="fit">${fmt(dueAmt)}</td>
       <td class="fit">${status}</td>
       <td class="fit">
-        <div class="flex gap-4">
+        <div class="flex gap-2">
           ${
             dueAmt > 0
               ? `<button class="btn ${paid ? "ghost" : "primary"}"
@@ -577,7 +558,7 @@ function renderBills() {
       <td class="fit">${fmt(dueAmt)}</td>
       <td class="fit">${status}</td>
       <td class="fit">
-        <div class="flex gap-4">
+        <div class="flex gap-2">
           ${
             dueAmt > 0
               ? `<button class="btn ${paid ? "ghost" : "primary"}"
@@ -670,9 +651,10 @@ function renderOne() {
       item.paid ? "مدفوع" : "غير مدفوع"
     }</span></td>
       <td class="fit">
-        <div class="flex gap-4">
-          <button class="btn ${item.paid ? "ghost" : "primary"}"
-                  onclick="togglePaid('one','${item.id}','${curM}')">
+        <div class="flex gap-2">
+          <button class="btn ${
+            item.paid ? "ghost" : "primary"
+          }" onclick="togglePaid('one','${item.id}','${curM}')">
             ${item.paid ? "إلغاء الدفع" : "تحديد كمدفوع"}
           </button>
           <button class="btn danger" onclick="deleteItem('one','${
@@ -739,7 +721,6 @@ function renderKPIs() {
 
   let instTotal = 0,
     billsTotal = 0;
-  // هذا التجميع يعتمد على نفس المراجع، لذلك includes يعمل كما هو
   [...inst, ...bills].forEach((item) => {
     const kind = inst.includes(item) ? "inst" : "bills";
     const dueAmt = dueThisMonth(item, curM);
@@ -808,7 +789,7 @@ function renderKPIs() {
     salary ? ((totalOut / salary) * 100).toFixed(1) : 0
   }%</td></tr>
       <tr><td class="font-bold">🏦 الادخار الفعلي</td><td class="fit font-bold" style="color:${
-        actualSaving >= 0 ? "var(--success)" : "var(--danger)"
+        actualSaving >= 0 ? "var(--accent-2)" : "var(--danger)"
       }">${fmt(actualSaving)}</td><td class="fit">${
     salary ? ((actualSaving / salary) * 100).toFixed(1) : 0
   }%</td></tr>
@@ -818,7 +799,7 @@ function renderKPIs() {
     salary ? ((savingTarget / salary) * 100).toFixed(1) : 0
   }%</td></tr>
       <tr><td class="font-bold">💵 الصافي المتبقي</td><td class="fit font-bold" style="color:${
-        net >= 0 ? "var(--success)" : "var(--danger)"
+        net >= 0 ? "var(--accent-2)" : "var(--danger)"
       }">${fmt(net)}</td><td class="fit">—</td></tr>
     </tbody>
   `;
@@ -986,25 +967,15 @@ function updateAlerts() {
   }
 }
 
-// ✅ إصلاح: لا تستخدم includes على كائنات محمّلة جديدًا
 function autoDeductIfDue(yyyymm) {
   const cur = ym(new Date());
   if (cur !== yyyymm) return;
-
-  // الأقساط
-  getLS(K.inst, "[]").forEach((item) => {
+  [...getLS(K.inst, "[]"), ...getLS(K.bills, "[]")].forEach((item) => {
+    const kind = getLS(K.inst, "[]").includes(item) ? "inst" : "bills";
     const dueAmt = dueThisMonth(item, yyyymm);
-    if (dueAmt > 0 && !isPaid("inst", item.id, yyyymm)) {
+    if (dueAmt > 0 && !isPaid(kind, item.id, yyyymm)) {
       const d = daysUntilDue(item, yyyymm);
-      if (d <= 0) setPaid("inst", item.id, yyyymm, true);
-    }
-  });
-  // الفواتير
-  getLS(K.bills, "[]").forEach((item) => {
-    const dueAmt = dueThisMonth(item, yyyymm);
-    if (dueAmt > 0 && !isPaid("bills", item.id, yyyymm)) {
-      const d = daysUntilDue(item, yyyymm);
-      if (d <= 0) setPaid("bills", item.id, yyyymm, true);
+      if (d <= 0) setPaid(kind, item.id, yyyymm, true);
     }
   });
 }
@@ -1012,16 +983,11 @@ function autoDeductIfDue(yyyymm) {
 function rolloverArrears(yyyymm) {
   const prev = prevMonthStr(yyyymm);
   let total = 0;
-
-  getLS(K.inst, "[]").forEach((item) => {
+  [...getLS(K.inst, "[]"), ...getLS(K.bills, "[]")].forEach((item) => {
+    const kind = getLS(K.inst, "[]").includes(item) ? "inst" : "bills";
     const dueAmt = dueThisMonth(item, prev);
-    if (dueAmt > 0 && !isPaid("inst", item.id, prev)) total += dueAmt;
+    if (dueAmt > 0 && !isPaid(kind, item.id, prev)) total += dueAmt;
   });
-  getLS(K.bills, "[]").forEach((item) => {
-    const dueAmt = dueThisMonth(item, prev);
-    if (dueAmt > 0 && !isPaid("bills", item.id, prev)) total += dueAmt;
-  });
-
   const R = getLS(K.roll, "{}");
   R[yyyymm] = total;
   setLS(K.roll, R);
@@ -1030,21 +996,6 @@ function rolloverArrears(yyyymm) {
       `↩️ تم ترحيل متأخرات بقيمة ${fmt(total)} من الشهر السابق.`,
       "warning"
     );
-}
-
-/* ===== Budget warn (عشان ما يصير ReferenceError) ===== */
-function checkBudgetWarn(cat) {
-  const curM = $("#monthPicker").value;
-  const B = getLS(K.budgets, "[]");
-  const b = B.find((x) => normCat(x.cat) === normCat(cat));
-  if (!b) return;
-  const spent = getLS(K.exps, "[]")
-    .filter((x) => ym(x.date) === curM && normCat(x.cat) === normCat(cat))
-    .reduce((s, x) => s + Number(x.amount || 0), 0);
-  if (!b.limit) return;
-  const pct = (spent / b.limit) * 100;
-  if (pct >= 100) showToast(`🚫 تعدّيت ميزانية "${b.cat}" (${pct.toFixed(1)}%)`, "danger");
-  else if (pct >= 80) showToast(`⚠️ قاربت حد ميزانية "${b.cat}" (${pct.toFixed(1)}%)`, "warning");
 }
 
 /* ===== Export ===== */
@@ -1188,8 +1139,8 @@ function openDetailedReport() {
   <body>
     <h1>📊 التقرير المالي المفصّل</h1>
     <div class="muted">شهر ${m} — تم إنشاؤه في ${now.toLocaleString(
-      "ar-SA"
-    )}</div>
+    "ar-SA"
+  )}</div>
 
     <div class="cards">
       <div class="card"><div>إجمالي الدخل</div><div class="ok" style="font-size:24px">${fmt(
@@ -1307,28 +1258,25 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // فتح المودال والتركيز مباشرة على "إضافة مصروف"
-document.getElementById("openModalBtn")?.addEventListener("click", () => {
-  const modal = document.getElementById("modal");
-  modal?.classList.add("show");
+document.getElementById('openModalBtn')?.addEventListener('click', () => {
+  const modal = document.getElementById('modal');
+  modal?.classList.add('show');
   setTimeout(() => {
-    document.getElementById("expForm")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-    document.getElementById("expCat")?.focus();
+    document.getElementById('expForm')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('expCat')?.focus();
   }, 50);
 });
 
-// زر الإغلاق
-document.getElementById("closeModal")?.addEventListener("click", () => {
-  document.getElementById("modal")?.classList.remove("show");
+// زر الإغلاق يبقى كما هو
+document.getElementById('closeModal')?.addEventListener('click', () => {
+  document.getElementById('modal')?.classList.remove('show');
 });
 
 // اختصار سريع: اضغط حرف e من أي مكان لإضافة مصروف بسرعة
-document.addEventListener("keydown", (e) => {
+document.addEventListener('keydown', (e) => {
   const isTyping = /^(input|textarea|select)$/i.test(e.target?.tagName);
-  if (!isTyping && e.key.toLowerCase() === "e") {
+  if (!isTyping && e.key.toLowerCase() === 'e') {
     e.preventDefault();
-    document.getElementById("openModalBtn")?.click();
+    document.getElementById('openModalBtn')?.click();
   }
 });
