@@ -1351,3 +1351,69 @@ body{
 @media (max-width: 540px){ :root{ --stack-label-w: 24%; } }
 @media (max-width: 430px){ :root{ --stack-label-w: 22%; } }
 @media (max-width: 380px){ :root{ --stack-label-w: 20%; } }
+
+/* ===== iPhone 15 Pro/Max & iOS Safari polish (paste at the very end) ===== */
+
+/* 1) شدّ الصفوف لتملأ العرض + أزرق full-bleed */
+@supports (-webkit-touch-callout:none){
+  @media (max-width: 768px){
+    .table-container{ padding:0 !important; }
+
+    .table.responsive-stack tr{
+      margin-inline: 0 !important;     /* أهم سطر: بدون فراغ جانبي */
+      display:block !important;
+      border:1px solid var(--border);
+      border-radius:14px;
+      overflow:hidden;
+      background: rgba(59,130,246,.08);          /* الأزرق */
+    }
+    .table.responsive-stack tr:hover{
+      background: rgba(59,130,246,.14);
+    }
+
+    .table.responsive-stack td{
+      display:flex !important;
+      align-items:center;
+      gap:8px;
+      border-bottom:1px solid var(--border);
+      padding:10px 12px 10px calc(var(--stack-label-w) + 10px) !important;
+    }
+    .table.responsive-stack td:last-child{ border-bottom:0; }
+
+    .table.responsive-stack td::before{
+      width: var(--stack-label-w) !important;
+      font-size:12.5px;
+      color:var(--muted);
+    }
+
+    /* لا تنكسر الأجزاء الحساسة لسطرين */
+    .table.responsive-stack td[data-label="المبلغ"],
+    .table.responsive-stack td[data-label="الدفع"],
+    .table.responsive-stack td[data-label="استحقاق هذا الشهر"],
+    .table.responsive-stack td .fit{ white-space: nowrap !important; }
+
+    .chip{ padding:3px 8px; line-height:1.1; }
+  }
+}
+
+/* 2) ضبط خاص لـ 430px (iPhone 15/Pro/Max) لتقليل مساحة عمود اللّيبل */
+@media (min-width: 420px) and (max-width: 460px){
+  :root{ --stack-label-w: 22% !important; }  /* كان 26% → يقلّل الفراغ داخل الخلية */
+}
+
+/* 3) إصلاحات iOS: ارتفاعات وكيبورد */
+:root{
+  --bn-h: clamp(56px, 9vh, 72px);
+}
+/* استخدم svh بدل vh لتفادي قفزات شريط سفاري */
+@supports (height: 100svh){
+  .sheet{ max-height: 92svh; }
+}
+/* منع زوم iOS عند الفوكس (خلي مدخلاتك ≥16px) */
+input, select, textarea{ font-size: 16px; }
+
+/* 4) تأمين الـFAB فوق الشريط مع النوتش */
+.fab{
+  inset-inline-end: calc(12px + env(safe-area-inset-right));
+  bottom: calc(var(--bn-h) + 14px + env(safe-area-inset-bottom));
+}
