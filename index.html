@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
-
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -15,7 +14,6 @@
   <!-- CSS -->
   <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
   <!-- شريط علوي -->
@@ -98,8 +96,11 @@
     <!-- الأقساط -->
     <section id="installments" class="card" data-route="installments">
       <h2>🏦 الأقساط الشهرية</h2>
-      <div class="table-container">
-        <table id="instTable" class="table responsive-stack">
+      <div id="instCards" class="cards-list" aria-live="polite"></div>
+
+      <!-- (اختياري) احتفاظ بالجدول لأغراض تصدير مستقبلية -->
+      <div style="display:none">
+        <table id="instTable" class="responsive-stack">
           <thead>
             <tr>
               <th>الاسم</th>
@@ -119,6 +120,7 @@
     <!-- الفواتير -->
     <section id="bills" class="card" data-route="bills">
       <h2>🧾 الفواتير المتكررة</h2>
+      <div id="billCards" class="cards-list" aria-live="polite"></div>
       <div class="table-container">
         <table id="billTable" class="table responsive-stack">
           <thead>
@@ -140,6 +142,7 @@
     <!-- المصاريف اليومية -->
     <section id="expenses" class="card" data-route="expenses">
       <h2>💳 المصاريف اليومية</h2>
+      <div id="expCards" class="cards-list" aria-live="polite"></div>
       <div class="toolbar mb-4">
         <input type="search" id="searchInput" placeholder="🔍 ابحث في المصاريف..." inputmode="search">
         <button id="exportCSV" class="btn ghost">📄 تصدير CSV</button>
@@ -166,6 +169,7 @@
     <!-- المصاريف الخارجية -->
     <section id="one-time" class="card" data-route="one-time">
       <h2>⚠️ المصاريف الخارجية</h2>
+      <div id="oneCards" class="cards-list" aria-live="polite"></div>
       <div class="table-container">
         <table id="oneTable" class="table responsive-stack">
           <thead>
@@ -254,8 +258,8 @@
             inputmode="numeric" pattern="[0-9]*">
           <input type="date" id="instStart" required dir="ltr" lang="en">
           <input type="date" id="instEnd" dir="ltr" lang="en">
-          <input type="number" id="instDueDay" placeholder="يوم الاستحقاق (1-31)" dir="ltr" lang="en" inputmode="numeric"
-            pattern="[0-9]*">
+          <input type="number" id="instDueDay" placeholder="يوم الاستحقاق (1-31)" dir="ltr" lang="en"
+            inputmode="numeric" pattern="[0-9]*">
           <button type="submit" class="btn primary mt-4">إضافة قسط</button>
         </form>
 
@@ -267,8 +271,8 @@
             inputmode="numeric" pattern="[0-9]*">
           <input type="date" id="billStart" required dir="ltr" lang="en">
           <input type="date" id="billEnd" dir="ltr" lang="en">
-          <input type="number" id="billDueDay" placeholder="يوم الاستحقاق (1-31)" dir="ltr" lang="en" inputmode="numeric"
-            pattern="[0-9]*">
+          <input type="number" id="billDueDay" placeholder="يوم الاستحقاق (1-31)" dir="ltr" lang="en"
+            inputmode="numeric" pattern="[0-9]*">
           <button type="submit" class="btn primary mt-4">إضافة فاتورة</button>
         </form>
 
@@ -332,6 +336,5 @@
 
   <!-- سكريبت التطبيق -->
   <script src="script.js"></script>
-
 </body>
 </html>
