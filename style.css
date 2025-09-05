@@ -1240,10 +1240,6 @@ body{
   z-index: 1000;
 }
 
-/* لما يكون فيه FAB: نترك حيّز بالجهة الأخيرة (يمين في RTL) */
-.bottom-nav.has-fab{
-  padding-inline-end: calc(var(--bn-pad) + var(--fab) + 14px + env(safe-area-inset-right));
-}
 
 /* روابط التنقل */
 .bottom-nav .nav-links{
@@ -1417,3 +1413,69 @@ input, select, textarea{ font-size: 16px; }
   inset-inline-end: calc(12px + env(safe-area-inset-right));
   bottom: calc(var(--bn-h) + 14px + env(safe-area-inset-bottom));
 }
+
+
+/* ===== Speed Dial فوق زر الـ FAB (موحّد، RTL + iOS) ===== */
+.speed-dial{
+  position: fixed;
+  inset-inline-end: calc(12px + env(safe-area-inset-right));
+  bottom: calc(var(--bn-h) + 14px + var(--fab) + env(safe-area-inset-bottom));
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 1300;
+}
+.speed-dial.open{ display: flex; }
+
+.sd-btn{
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+:root.light .sd-btn{
+  background: rgba(255,255,255,.9);
+  color: var(--text);
+}
+
+/* Checkboxes نظيفة */
+.checkbox-container{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+  user-select: none;
+}
+.checkbox-container input{
+  inline-size: 18px;
+  block-size: 18px;
+}
+.checkbox-container span{
+  color: var(--text);
+  font-size: 14px;
+}
+
+.progress-fill{
+  height: 100%;
+  width: 0%;
+  background: var(--gradient-success);
+  transition: width .4s ease; /* إضافة جميلة للحركة */
+}
+
+.bottom-nav {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom) + 20px); /* نرفعه فوق أكثر */
+  left: 12px;
+  right: 12px;
+  border-radius: 16px;
+  margin: auto;
+  width: calc(100% - 24px); /* مو ملتصق بأطراف الشاشة */
+  box-shadow: 0 6px 20px rgba(0,0,0,.2);
+}
+
+
