@@ -1,1302 +1,1410 @@
-/* =========================
-   إدارة مالي — script.js (v3.2)
-   - Router خفيف
-   - LocalStorage
-   - جداول + تقارير + تصدير
-   - تنبيهات + FAB + Modal
-   - Charts (Chart.js)
-========================= */
+:root {
+    /* ألوان أساسية */
+    --bg: #0b0f19;
+    --bg2: #0a0f1b;
+    --panel: #0f172a;
+    --glass: rgba(17, 24, 39, .55);
+    --ink: #e6eeff;
+    --text: #e6eeff;
+    --muted: #8da3c1;
+    --border: #1f2937;
+    --table: #0e1424;
 
-// ===== Helpers
-const $ = (s, r = document) => r.querySelector(s);
-const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+    /* ألوان تمييز */
+    --primary: #2e90fa;
+    --primary-700: #1b6fd6;
+    --secondary: #7c3aed;
+    --secondary-700: #5b21b6;
+    --success: #10b981;
+    --success-700: #047857;
+    --warning: #f59e0b;
+    --danger: #ef4444;
 
-// YYYY-MM من تاريخ (محلي بلا انزياح)
-const ym = (d) => {
-  if (!d) return "";
-  if (typeof d === "string") return d.slice(0, 7);
-  const t = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-  return t.toISOString().slice(0, 7);
-};
-const today = new Date().toISOString().slice(0, 10);
-const normCat = (s) => (s || "").toString().trim().toLowerCase();
-const fmt = (n) =>
-  Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 }) + " ر.س";
-const lastDayOfMonth = (y, m) => new Date(y, m, 0).getDate();
-const prevMonthStr = (yyyymm) => {
-  let [y, m] = yyyymm.split("-").map(Number);
-  m === 1 ? (y--, (m = 12)) : m--;
-  return `${y}-${String(m).padStart(2, "0")}`;
-};
+    /* تدرجات */
+    --gradient-primary: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+    --gradient-success: linear-gradient(135deg, var(--success) 0%, var(--success-700) 100%);
+    --gradient-warning: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
 
-// ===== Toast
-function showToast(msg, type = "") {
-  const t = $("#toast");
-  if (!t) return;
-  t.className = `toast ${type}`.trim();
-  t.innerHTML = msg;
-  t.style.display = "block";
-  clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => (t.style.display = "none"), 2200);
+    /* ظلال/أحجام */
+    --shadow: 0 10px 30px rgba(0, 0, 0, .35);
+    --shadow-lg: 0 20px 60px rgba(0, 0, 0, .5);
+    --tap-height: 44px;
+    --card-radius: 20px;
+    --input-radius: 12px;
+    --btn-radius: 12px;
+
+    /* حقول */
+    --input-bg: rgba(11, 19, 39, .60);
+    --input-bg-focus-ring: rgba(46, 144, 250, .22);
+
+    /* حدود عرض المحتوى حسب المقاسات الكبيرة */
+    --container-w: 1200px;
 }
 
-// ===== Storage Keys
-const K = {
-  salary: "pf_salary",
-  saving: "pf_saving",
-  settings: "pf_settings",
-  inst: "pf_inst",
-  bills: "pf_bills",
-  exps: "pf_exps",
-  one: "pf_one",
-  budgets: "pf_budgets",
-  paid: "pf_paid_monthly",
-  roll: "pf_rollovers",
-};
-const getLS = (k, fallbackJSON) => {
-  try {
-    return JSON.parse(localStorage.getItem(k) ?? fallbackJSON);
-  } catch {
-    return JSON.parse(fallbackJSON);
-  }
-};
-const setLS = (k, v) => localStorage.setItem(k, JSON.stringify(v));
-
-// ===== Common (due / paid)
-const withinMonthRange = (start, end, yyyymm) => yyyymm >= ym(start);
-const dueThisMonth = (item, yyyymm) =>
-  withinMonthRange(item.start, item.end, yyyymm) ? Number(item.amount || 0) : 0;
-const isPaid = (kind, id, yyyymm) =>
-  !!getLS(K.paid, "{}")[`${kind}:${id}:${yyyymm}`];
-const setPaid = (kind, id, yyyymm, val) => {
-  const m = getLS(K.paid, "{}");
-  m[`${kind}:${id}:${yyyymm}`] = !!val;
-  setLS(K.paid, m);
-};
-const daysUntilDue = (item, yyyymm) => {
-  const y = +yyyymm.slice(0, 4),
-    m = +yyyymm.slice(5, 7);
-  const last = lastDayOfMonth(y, m);
-  const d = Math.min(item.dueDay || last, last);
-  const due = new Date(y, m - 1, d);
-  return Math.floor((due - new Date()) / 86400000);
-};
-const payLabel = (p) =>
-  ({
-    cash: "💵 كاش",
-    card: "💳 بطاقة",
-    transfer: "🏦 تحويل",
-    wallet: "📱 محفظة",
-  }[p] ||
-  p ||
-  "-");
-
-// ===== UI LTR numeric for inputs
-function ensureLTRNumeric() {
-  $$('input[type="number"], input[type="date"], input[type="month"]').forEach(
-    (el) => {
-      el.setAttribute("dir", "ltr");
-      el.style.direction = "ltr";
-      if (el.type === "number") el.setAttribute("inputmode", "numeric");
+@media (min-width: 1536px) {
+    :root {
+        --container-w: 1320px;
     }
-  );
-  $("#expAmount")?.setAttribute("inputmode", "decimal");
 }
 
-// ===== THEME + Settings
-function applySavedSettings() {
-  const st = getLS(K.settings, '{"cash":false,"auto":false,"roll":false}');
-  $("#salaryInput").value = +getLS(K.salary, "0") || "";
-  $("#savingTargetInput").value = +getLS(K.saving, "0") || "";
-  $("#cashMode").checked = !!st.cash;
-  $("#autoDeduct").checked = !!st.auto;
-  $("#rollover").checked = !!st.roll;
-  const savedTheme = localStorage.getItem("theme");
-  if (savedTheme === "light") {
-    $("#themeToggle").checked = true;
-    document.documentElement.classList.add("light");
-  }
-}
-
-function bindUI() {
-  $("#themeToggle")?.addEventListener("change", () => {
-    document.documentElement.classList.toggle(
-      "light",
-      $("#themeToggle").checked
-    );
-    localStorage.setItem("theme", $("#themeToggle").checked ? "light" : "dark");
-  });
-
-  $("#monthPicker").addEventListener("change", () => {
-    const st = getLS(K.settings, '{"cash":false,"auto":false,"roll":false}');
-    const curM = $("#monthPicker").value;
-    if (st.auto) autoDeductIfDue(curM);
-    if (st.roll) rolloverArrears(curM);
-    renderAll();
-  });
-
-  $("#applySuggestedBtn").addEventListener("click", () => {
-    const salary = +($("#salaryInput").value || 0);
-    const suggested = Math.round(salary * 0.15);
-    $("#savingTargetInput").value = suggested;
-    setLS(K.saving, suggested);
-    showToast(`💡 تم تطبيق الادخار المقترح: ${fmt(suggested)}`, "success");
-    renderKPIs();
-  });
-
-  $("#saveSettingsBtn").addEventListener("click", () => {
-    setLS(K.salary, +($("#salaryInput").value || 0));
-    setLS(K.saving, +($("#savingTargetInput").value || 0));
-    setLS(K.settings, {
-      cash: $("#cashMode").checked,
-      auto: $("#autoDeduct").checked,
-      roll: $("#rollover").checked,
-    });
-    showToast("✅ تم حفظ الإعدادات", "success");
-    renderAll();
-  });
-
-  // Forms
-  $("#instForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const name = $("#instName").value.trim();
-    const amount = +$("#instAmount").value;
-    const start = $("#instStart").value;
-    const end = $("#instEnd").value || null;
-    const dueDay = +$("#instDueDay").value || null;
-    if (!name || !start || !amount)
-      return showToast("⚠️ أكمل الحقول (الاسم/المبلغ/البداية)", "warning");
-    if (dueDay && (dueDay < 1 || dueDay > 31))
-      return showToast("⚠️ يوم الاستحقاق 1–31", "warning");
-    if (end && start > end)
-      return showToast("⚠️ نهاية المدة قبل بدايتها", "warning");
-    const L = getLS(K.inst, "[]");
-    L.push({
-      id: "inst_" + (crypto.randomUUID?.() || Date.now().toString(36)),
-      name,
-      amount,
-      start,
-      end,
-      dueDay,
-    });
-    setLS(K.inst, L);
-    e.target.reset();
-    ensureLTRNumeric();
-    showToast("✅ تمت إضافة القسط", "success");
-    renderInst();
-    renderKPIs();
-    updateAlerts();
-  });
-
-  $("#billForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const name = $("#billName").value.trim();
-    const amount = +$("#billAmount").value;
-    const start = $("#billStart").value;
-    const end = $("#billEnd").value || null;
-    const dueDay = +$("#billDueDay").value || null;
-    if (!name || !start || !amount)
-      return showToast("⚠️ أكمل الحقول (الاسم/المبلغ/البداية)", "warning");
-    if (dueDay && (dueDay < 1 || dueDay > 31))
-      return showToast("⚠️ يوم الاستحقاق 1–31", "warning");
-    if (end && start > end)
-      return showToast("⚠️ نهاية المدة قبل بدايتها", "warning");
-    const L = getLS(K.bills, "[]");
-    L.push({
-      id: "bill_" + (crypto.randomUUID?.() || Date.now().toString(36)),
-      name,
-      amount,
-      start,
-      end,
-      dueDay,
-    });
-    setLS(K.bills, L);
-    e.target.reset();
-    ensureLTRNumeric();
-    showToast("✅ تمت إضافة الفاتورة", "success");
-    renderBills();
-    renderKPIs();
-    updateAlerts();
-  });
-
-  $("#expForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const item = {
-      id: "exp_" + (crypto.randomUUID?.() || Date.now().toString(36)),
-      date: $("#expDate").value,
-      cat: $("#expCat").value.trim(),
-      note: $("#expNote").value.trim(),
-      pay: $("#expPay").value,
-      amount: Number($("#expAmount").value || 0),
-    };
-    if (!item.date || !item.cat || !item.amount)
-      return showToast("⚠️ أكمل البيانات", "warning");
-    const L = getLS(K.exps, "[]");
-    L.push(item);
-    setLS(K.exps, L);
-    e.target.reset();
-    $("#expDate").value = today;
-    ensureLTRNumeric();
-    showToast("✅ تمت إضافة المصروف", "success");
-    renderExpenses();
-    renderBudgets();
-    renderKPIs();
-    checkBudgetWarn(item.cat);
-  });
-
-  $("#oneForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const item = {
-      id: "one_" + (crypto.randomUUID?.() || Date.now().toString(36)),
-      date: $("#oneDate").value,
-      cat: $("#oneCat").value.trim(),
-      note: $("#oneNote").value.trim(),
-      amount: Number($("#oneAmount").value || 0),
-      paid: $("#onePaid").checked,
-    };
-    if (!item.date || !item.cat || !item.amount)
-      return showToast("⚠️ أكمل البيانات", "warning");
-    const L = getLS(K.one, "[]");
-    L.push(item);
-    setLS(K.one, L);
-    e.target.reset();
-    $("#oneDate").value = today;
-    ensureLTRNumeric();
-    showToast("✅ تمت إضافة المصروف الخارجي", "success");
-    renderOne();
-    renderKPIs();
-  });
-
-  // budgets (إضافة/تحديث)
-  $("#budForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const cat = $("#budCat").value.trim();
-    const limit = +$("#budLimit").value;
-    if (!cat || !limit) return showToast("⚠️ أكمل بيانات الميزانية", "warning");
-    const B = getLS(K.budgets, "[]");
-    const idx = B.findIndex((b) => normCat(b.cat) === normCat(cat));
-    if (idx > -1) {
-      B[idx].limit = limit;
-    } else {
-      B.push({
-        id: "bud_" + (crypto.randomUUID?.() || Date.now().toString(36)),
-        cat,
-        limit,
-      });
+@media (min-width: 1920px) {
+    :root {
+        --container-w: 1440px;
     }
-    setLS(K.budgets, B);
-    e.target.reset();
-    showToast("✅ تم حفظ الميزانية", "success");
-    renderBudgets();
-  });
+}
 
-  // بحث وتصدير
-  $("#searchInput").addEventListener("input", renderExpenses);
-  $("#exportCSV").addEventListener("click", () =>
-    exportCSV($("#monthPicker").value, $("#searchInput").value)
-  );
-  $("#exportJSON").addEventListener("click", exportJSON);
+/* ========================= Light Theme ========================= */
+:root.light {
+    --bg: #f6f8fb;
+    --bg2: #ffffff;
+    --panel: #ffffff;
+    --glass: rgba(255, 255, 255, .9);
+    --ink: #0f172a;
+    --text: #0f172a;
+    --muted: #64748b;
+    --border: #e5e7eb;
+    --table: #fbfcfe;
 
-  // تقارير
-  $("#btnReport")?.addEventListener("click", openDetailedReport);
-  $("#btnCompare")?.addEventListener("click", openCompare);
+    --primary: #5b5bd6;
+    --primary-700: #4b4bd1;
+    --secondary: #7c3aed;
+    --secondary-700: #5b21b6;
+    --success: #16a34a;
+    --success-700: #0f7a37;
+    --warning: #d97706;
+    --danger: #dc2626;
 
-  // Modal
-  setupModal();
+    --shadow: 0 8px 24px rgba(15, 23, 42, .08);
+    --shadow-lg: 0 16px 50px rgba(15, 23, 42, .12);
 
-  // اختصار E لفتح المودال
-  document.addEventListener("keydown", (e) => {
-    const isTyping = /^(input|textarea|select)$/i.test(e.target?.tagName);
-    if (!isTyping && e.key.toLowerCase() === "e") {
-      e.preventDefault();
-      $("#openModalBtn")?.click();
+    --gradient-primary: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+    --gradient-success: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+
+    --input-bg: #ffffff;
+    --input-bg-focus-ring: rgba(99, 102, 241, .18);
+}
+
+/* خلفية */
+body {
+    margin: 0;
+    padding: 0;
+    color: var(--text);
+    line-height: 1.65;
+    font-size: clamp(14px, 1.05vw, 16px);
+    font-family: "Tajawal", system-ui, "Noto Naskh Arabic UI", Arial, sans-serif;
+    background:
+        radial-gradient(1200px 600px at 20% -10%, #152038 0%, transparent 60%),
+        radial-gradient(1200px 600px at 120% 10%, #0a1a30 0%, transparent 60%),
+        linear-gradient(180deg, var(--bg), var(--bg2));
+    transition: background .3s ease, color .3s ease;
+}
+
+:root.light body {
+    background:
+        radial-gradient(1200px 600px at 10% -20%, rgba(99, 102, 241, .10) 0%, transparent 60%),
+        radial-gradient(1200px 600px at 110% 0%, rgba(124, 58, 237, .08) 0%, transparent 60%),
+        linear-gradient(180deg, var(--bg), var(--bg2));
+}
+
+/* ========================= أساسيات ========================= */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+}
+
+html,
+body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* أرقام: تحسين شكلها */
+* {
+    font-feature-settings: "lnum" 1;
+}
+
+/* ========================= الحاويات والـ Grid ========================= */
+.container {
+    max-width: var(--container-w);
+    width: 100%;
+    margin: 22px auto;
+    padding: 0 clamp(12px, 4vw, 24px) calc(88px + env(safe-area-inset-bottom));
+    display: grid;
+    gap: clamp(12px, 1.6vw, 16px);
+}
+
+.grid {
+    display: grid;
+    gap: 14px;
+}
+
+.grid-cols-responsive {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+}
+
+.grid.cols-2 {
+    grid-template-columns: 1.2fr .8fr;
+}
+
+.grid.cols-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 1200px) {
+
+    .grid.cols-2,
+    .grid.cols-3 {
+        grid-template-columns: 1fr;
     }
-  });
 }
 
-// ===== Modal (+)
-function setupModal() {
-  const modal = $("#modal");
-  const fab = $("#openModalBtn");
-  fab?.addEventListener("click", () => {
-    modal.classList.add("show");
-    ensureLTRNumeric();
-    setTimeout(() => {
-      $("#expForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      $("#expCat")?.focus();
-    }, 50);
-  });
-  $("#closeModal")?.addEventListener("click", () =>
-    modal.classList.remove("show")
-  );
-  modal?.addEventListener("click", (e) => {
-    if (e.target === modal) modal.classList.remove("show");
-  });
-  document.addEventListener(
-    "keydown",
-    (e) => e.key === "Escape" && modal.classList.remove("show")
-  );
+.full {
+    grid-column: 1 / -1;
 }
 
-// ===== Delete / Toggle
-function deleteItem(kind, id) {
-  const map = {
-    inst: K.inst,
-    bills: K.bills,
-    exps: K.exps,
-    one: K.one,
-    budgets: K.budgets,
-  };
-  const key = map[kind];
-  if (!key) return;
-  let L = getLS(key, "[]");
-  const before = L.length;
-  L = L.filter((x) => x.id !== id);
-  setLS(key, L);
-  if (L.length < before) {
-    showToast("🗑️ تم الحذف", "success");
-    if (kind === "inst") renderInst();
-    else if (kind === "bills") renderBills();
-    else if (kind === "exps") renderExpenses();
-    else if (kind === "one") renderOne();
-    else if (kind === "budgets") renderBudgets();
-    renderKPIs();
-    updateAlerts();
-  }
+/* ========================= التوب بار ========================= */
+.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: linear-gradient(180deg, rgba(12, 19, 36, .95), rgba(11, 16, 32, .95));
+    backdrop-filter: blur(18px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px clamp(12px, 3vw, 16px);
+    padding-top: calc(12px + env(safe-area-inset-top));
+    box-shadow: var(--shadow);
 }
-window.deleteItem = deleteItem;
 
-function togglePaid(kind, id, yyyymm) {
-  if (kind === "one") {
-    const L = getLS(K.one, "[]");
-    const i = L.findIndex((x) => x.id === id);
-    if (i > -1) {
-      L[i].paid = !L[i].paid;
-      setLS(K.one, L);
-      showToast("✅ تم التحديث", "success");
-      renderOne();
-      renderKPIs();
+:root.light .topbar {
+    background: linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(249, 250, 251, .96));
+}
+
+.title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.title h1 {
+    margin: 0;
+    font-size: clamp(18px, 2.2vw, 22px);
+    font-weight: 700;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* شارة تنبيهات */
+.notification-badge {
+    background: rgba(239, 68, 68, .1);
+    border: 1px solid rgba(239, 68, 68, .3);
+    color: #ffc0c6;
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: .2s ease;
+}
+
+.notification-badge:hover {
+    background: rgba(239, 68, 68, .2);
+    transform: translateY(-1px);
+}
+
+/* سويتش الثيم */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 64px;
+    height: 34px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    inset: 0;
+    background: #374151;
+    border-radius: 999px;
+    transition: background-color .25s;
+}
+
+.slider:before {
+    content: "🌙";
+    display: grid;
+    place-items: center;
+    position: absolute;
+    left: 6px;
+    bottom: 7px;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    color: #111;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform .25s, background-color .25s;
+}
+
+input:checked+.slider {
+    background: var(--primary);
+}
+
+input:checked+.slider:before {
+    transform: translateX(28px);
+    content: "☀️";
+}
+
+/* ========================= البطاقات ========================= */
+.card {
+    background: var(--glass);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    padding: clamp(12px, 1.6vw, 16px);
+    box-shadow: var(--shadow);
+    transition: transform .25s ease, box-shadow .25s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+}
+
+.card h2 {
+    margin: 0 0 12px;
+    font-size: clamp(16px, 1.6vw, 20px);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+:root.light .card {
+    background: #fff;
+}
+
+/* ========================= الأدوات والحقول ========================= */
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.toolbar .grow {
+    flex: 1 1 160px;
+    min-width: 0;
+}
+
+input,
+select,
+textarea {
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--input-radius);
+    padding: 12px 14px;
+    color: var(--text);
+    min-height: var(--tap-height);
+    font-family: inherit;
+    font-size: 15px;
+    backdrop-filter: blur(10px);
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--muted);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--input-bg-focus-ring);
+}
+
+/* ========================= الأزرار ========================= */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-radius: var(--btn-radius);
+    border: 1px solid var(--border);
+    background: rgba(21, 30, 51, .8);
+    color: var(--text);
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    min-height: 40px;
+    transition: transform .2s, box-shadow .2s, background .2s, color .2s;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+}
+
+.btn.primary {
+    background: var(--gradient-primary);
+    color: #fff;
+    border-color: transparent;
+}
+
+.btn.secondary {
+    background: linear-gradient(135deg, var(--secondary) 0%, var(--secondary-700) 100%);
+    color: #fff;
+    border-color: transparent;
+}
+
+.btn.success {
+    background: var(--gradient-success);
+    color: #fff;
+    border-color: transparent;
+}
+
+.btn.warning {
+    background: var(--gradient-warning);
+    color: #fff;
+    border-color: transparent;
+}
+
+.btn.ghost {
+    background: transparent;
+    border-color: var(--border);
+}
+
+.btn.danger {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+}
+
+.btn.danger:hover {
+    background: #fecaca;
+}
+
+#applySuggestedBtn {
+    border-color: rgba(99, 102, 241, .35) !important;
+    color: #4f46e5 !important;
+    background: rgba(99, 102, 241, .08) !important;
+}
+
+#applySuggestedBtn:hover {
+    background: rgba(99, 102, 241, .14) !important;
+}
+
+/* ========================= مؤشرات (KPIs) ========================= */
+.kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.kpi {
+    background: linear-gradient(135deg, rgba(14, 22, 43, .8) 0%, rgba(13, 20, 38, .8) 100%);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+}
+
+.kpi .lbl {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.kpi .val {
+    font-weight: 800;
+    font-size: clamp(20px, 2.2vw, 24px);
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Progress bar (هدف الادخار) */
+.progress-bar-container {
+    display: grid;
+    gap: 8px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .08);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--gradient-success);
+}
+
+/* ========================= الرسوم (Charts) ========================= */
+.charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.chart-container {
+    background: rgba(14, 22, 43, .4);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 12px;
+}
+
+canvas {
+    max-width: 100% !important;
+    width: 100% !important;
+    height: auto !important;
+}
+
+:root.light .chart-container {
+    background: #fff;
+}
+
+/* ========================= الجداول ========================= */
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+    background: rgba(12, 19, 38, .6);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: right;
+    background: transparent;
+}
+
+.table th,
+.table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(24, 35, 58, .5);
+    white-space: nowrap;
+    font-size: 14px;
+}
+
+.table thead {
+    background: rgba(14, 20, 36, .8);
+}
+
+.table tbody tr:hover {
+    background: rgba(46, 144, 250, .05);
+}
+
+.fit {
+    white-space: nowrap;
+    width: 1%;
+}
+
+/* نمط Stack للجوال */
+@media (max-width: 768px) {
+    .table.responsive-stack {
+        display: block;
     }
-    return;
-  }
-  const val = !isPaid(kind, id, yyyymm);
-  setPaid(kind, id, yyyymm, val);
-  showToast("✅ تم التحديث", "success");
-  if (kind === "inst") renderInst();
-  else renderBills();
-  renderKPIs();
-  updateAlerts();
-}
-window.togglePaid = togglePaid;
 
-function payPrev(kind, id) {
-  const curM = $("#monthPicker").value;
-  const prevM = prevMonthStr(curM);
-  const list = kind === "inst" ? getLS(K.inst, "[]") : getLS(K.bills, "[]");
-  const item = list.find((x) => x.id === id);
-  if (!item) return;
-  const prevDue = dueThisMonth(item, prevM);
-  const prevPaid = isPaid(kind, id, prevM);
-  if (prevDue > 0 && !prevPaid) {
-    setPaid(kind, id, prevM, true);
-    showToast(`✅ تم تسجيل دفع شهر ${prevM}`, "success");
-    if (kind === "inst") renderInst();
-    else renderBills();
-    renderKPIs();
-    updateAlerts();
-  } else {
-    showToast("ℹ️ لا يوجد مبلغ غير مدفوع للشهر السابق.", "warning");
-  }
-}
-window.payPrev = payPrev;
-
-// ===== Renderers
-function statusChip(paid, dueAmt, item, yyyymm) {
-  if (!dueAmt) return `<span class="chip gray">—</span>`;
-  if (paid) return `<span class="chip green">مدفوع</span>`;
-  const curYM = ym(new Date());
-  const d = daysUntilDue(item, yyyymm);
-  if (yyyymm < curYM) return `<span class="chip orange">متأخر</span>`;
-  if (yyyymm > curYM) return `<span class="chip blue">مستقبلي</span>`;
-  if (d < 0) return `<span class="chip orange">متأخر</span>`;
-  if (d <= 3) return `<span class="chip warning">قريب (${d}ي)</span>`;
-  return `<span class="chip">مستحق هذا الشهر</span>`;
-}
-function priorityKey(kind, item, yyyymm) {
-  const dueAmt = dueThisMonth(item, yyyymm);
-  const paid = isPaid(kind, item.id, yyyymm);
-  const d = daysUntilDue(item, yyyymm);
-  let pri;
-  if (dueAmt === 0) pri = 5;
-  else if (paid) pri = 4;
-  else if (d < 0) pri = 0;
-  else if (d <= 3) pri = 1;
-  else pri = 2;
-  const y = +yyyymm.slice(0, 4),
-    m = +yyyymm.slice(5, 7),
-    last = lastDayOfMonth(y, m),
-    day = Math.min(item.dueDay || last, last);
-  return [pri, day, item.name || ""];
-}
-
-function renderInst() {
-  const curM = $("#monthPicker").value;
-  const L = getLS(K.inst, "[]");
-  const tbody = $("#instTable tbody");
-  tbody.innerHTML = "";
-  if (!L.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="muted">لا توجد أقساط</td></tr>`;
-    return;
-  }
-  L.sort((a, b) => {
-    const [pa, da, na] = priorityKey("inst", a, curM);
-    const [pb, db, nb] = priorityKey("inst", b, curM);
-    return pa - pb || da - db || na.localeCompare(nb);
-  });
-  const nowYM = ym(new Date());
-  L.forEach((item) => {
-    const dueAmt = dueThisMonth(item, curM);
-    const paid = isPaid("inst", item.id, curM);
-    const status = statusChip(paid, dueAmt, item, curM);
-    const y = +curM.slice(0, 4),
-      m = +curM.slice(5, 7),
-      last = lastDayOfMonth(y, m);
-    const dueDay = Math.min(item.dueDay || last, last);
-    const prevM = prevMonthStr(curM),
-      prevDue = dueThisMonth(item, prevM),
-      prevPaid = isPaid("inst", item.id, prevM);
-    const canPayPrev = prevDue > 0 && !prevPaid;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td data-label="الاسم">${item.name}</td>
-      <td data-label="المبلغ" class="fit">${fmt(item.amount)}</td>
-      <td data-label="المدى" class="fit">${item.start}${
-      item.end ? ` → ${item.end}` : ""
-    }</td>
-      <td data-label="يوم الاستحقاق" class="fit">${dueDay}</td>
-      <td data-label="استحقاق هذا الشهر" class="fit">${fmt(dueAmt)}</td>
-      <td data-label="الحالة" class="fit">${status}</td>
-      <td data-label="الإجراءات" class="fit">
-        <div class="flex gap-2">
-          ${
-            dueAmt > 0
-              ? `<button class="btn ${
-                  paid ? "ghost" : "primary"
-                }" onclick="togglePaid('inst','${item.id}','${curM}')">${
-                  paid
-                    ? "إلغاء الدفع"
-                    : curM < nowYM
-                    ? "دفع هذا الشهر (متأخر)"
-                    : "تحديد كمدفوع"
-                }</button>`
-              : ""
-          }
-          ${
-            canPayPrev
-              ? `<button class="btn warning" title="تسجيل دفع الشهر السابق (${prevM})" onclick="payPrev('inst','${item.id}')">دفع متأخر (${prevM})</button>`
-              : ""
-          }
-          <button class="btn danger" onclick="deleteItem('inst','${
-            item.id
-          }')">حذف</button>
-        </div>
-      </td>`;
-    tbody.appendChild(tr);
-  });
-}
-
-function renderBills() {
-  const curM = $("#monthPicker").value;
-  const L = getLS(K.bills, "[]");
-  const tbody = $("#billTable tbody");
-  tbody.innerHTML = "";
-  if (!L.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="muted">لا توجد فواتير</td></tr>`;
-    return;
-  }
-  L.sort((a, b) => {
-    const [pa, da, na] = priorityKey("bills", a, curM);
-    const [pb, db, nb] = priorityKey("bills", b, curM);
-    return pa - pb || da - db || na.localeCompare(nb);
-  });
-  const nowYM = ym(new Date());
-  L.forEach((item) => {
-    const dueAmt = dueThisMonth(item, curM);
-    const paid = isPaid("bills", item.id, curM);
-    const status = statusChip(paid, dueAmt, item, curM);
-    const y = +curM.slice(0, 4),
-      m = +curM.slice(5, 7),
-      last = lastDayOfMonth(y, m);
-    const dday = Math.min(item.dueDay || last, last);
-    const prevM = prevMonthStr(curM),
-      prevDue = dueThisMonth(item, prevM),
-      prevPaid = isPaid("bills", item.id, prevM);
-    const canPayPrev = prevDue > 0 && !prevPaid;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td data-label="الاسم">${item.name}</td>
-      <td data-label="المبلغ" class="fit">${fmt(item.amount)}</td>
-      <td data-label="المدى" class="fit">${item.start}${
-      item.end ? ` → ${item.end}` : ""
-    }</td>
-      <td data-label="يوم الاستحقاق" class="fit">${dday}</td>
-      <td data-label="استحقاق هذا الشهر" class="fit">${fmt(dueAmt)}</td>
-      <td data-label="الحالة" class="fit">${status}</td>
-      <td data-label="الإجراءات" class="fit">
-        <div class="flex gap-2">
-          ${
-            dueAmt > 0
-              ? `<button class="btn ${
-                  paid ? "ghost" : "primary"
-                }" onclick="togglePaid('bills','${item.id}','${curM}')">${
-                  paid
-                    ? "إلغاء الدفع"
-                    : curM < nowYM
-                    ? "دفع هذا الشهر (متأخر)"
-                    : "تحديد كمدفوع"
-                }</button>`
-              : ""
-          }
-          ${
-            canPayPrev
-              ? `<button class="btn warning" title="تسجيل دفع الشهر السابق (${prevM})" onclick="payPrev('bills','${item.id}')">دفع متأخر (${prevM})</button>`
-              : ""
-          }
-          <button class="btn danger" onclick="deleteItem('bills','${
-            item.id
-          }')">حذف</button>
-        </div>
-      </td>`;
-    tbody.appendChild(tr);
-  });
-}
-
-function renderExpenses() {
-  const curM = $("#monthPicker").value;
-  const q = ($("#searchInput").value || "").toLowerCase();
-  const L = getLS(K.exps, "[]")
-    .filter(
-      (x) =>
-        ym(x.date) === curM &&
-        (!q || normCat(x.cat).includes(q) || normCat(x.note).includes(q))
-    )
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const tbody = $("#expTable tbody");
-  tbody.innerHTML = "";
-  let total = 0;
-  if (!L.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="muted">لا توجد مصروفات</td></tr>`;
-  } else {
-    L.forEach((item) => {
-      total += Number(item.amount || 0);
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td data-label="التاريخ">${item.date}</td>
-        <td data-label="التصنيف"><span class="chip blue">${item.cat}</span></td>
-        <td data-label="الوصف">${item.note || "-"}</td>
-        <td data-label="الدفع" class="fit">${payLabel(item.pay)}</td>
-        <td data-label="المبلغ" class="fit">${fmt(item.amount)}</td>
-        <td data-label="الإجراءات" class="fit">
-          <button class="btn danger" onclick="deleteItem('exps','${
-            item.id
-          }')">حذف</button>
-        </td>`;
-      tbody.appendChild(tr);
-    });
-  }
-  $("#expShownTotal").textContent = fmt(total);
-}
-
-function renderOne() {
-  const curM = $("#monthPicker").value;
-  const L = getLS(K.one, "[]")
-    .filter((x) => ym(x.date) === curM)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const tbody = $("#oneTable tbody");
-  tbody.innerHTML = "";
-  if (!L.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="muted">لا توجد مصاريف خارجية</td></tr>`;
-    return;
-  }
-  L.forEach((item) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td data-label="التاريخ">${item.date}</td>
-      <td data-label="النوع">${item.cat}</td>
-      <td data-label="ملاحظة">${item.note || "-"}</td>
-      <td data-label="المبلغ" class="fit">${fmt(item.amount)}</td>
-      <td data-label="الحالة" class="fit"><span class="chip ${
-        item.paid ? "green" : "orange"
-      }">${item.paid ? "مدفوع" : "غير مدفوع"}</span></td>
-      <td data-label="الإجراءات" class="fit">
-        <div class="flex gap-2">
-          <button class="btn ${
-            item.paid ? "ghost" : "primary"
-          }" onclick="togglePaid('one','${item.id}','${curM}')">${
-      item.paid ? "إلغاء الدفع" : "تحديد كمدفوع"
-    }</button>
-          <button class="btn danger" onclick="deleteItem('one','${
-            item.id
-          }')">حذف</button>
-        </div>
-      </td>`;
-    tbody.appendChild(tr);
-  });
-}
-
-function renderBudgets() {
-  const curM = $("#monthPicker").value;
-  const B = getLS(K.budgets, "[]");
-  const E = getLS(K.exps, "[]");
-  const tbody = $("#budTable tbody");
-  tbody.innerHTML = "";
-  if (!B.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="muted">لا توجد ميزانيات</td></tr>`;
-    return;
-  }
-  B.forEach((b) => {
-    const spent = E.filter(
-      (x) => ym(x.date) === curM && normCat(x.cat) === normCat(b.cat)
-    ).reduce((s, x) => s + Number(x.amount || 0), 0);
-    const pct = b.limit ? (spent / b.limit) * 100 : 0;
-    const status = pct >= 100 ? "danger" : pct >= 80 ? "warning" : "green";
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td data-label="التصنيف"><span class="chip blue">${b.cat}</span></td>
-      <td data-label="الحد المحدد" class="fit">${fmt(b.limit)}</td>
-      <td data-label="المصروف الحالي" class="fit">${fmt(spent)}</td>
-      <td data-label="النسبة المستخدمة" class="fit">
-        <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(
-          pct,
-          100
-        )}%"></div></div>
-        <span class="chip ${status}">${pct.toFixed(1)}%</span>
-      </td>
-      <td data-label="الإجراءات" class="fit"><button class="btn danger" onclick="deleteItem('budgets','${
-        b.id || b.cat
-      }')">حذف</button></td>`;
-    tbody.appendChild(tr);
-  });
-}
-
-// ===== KPIs + Month Summary
-function renderKPIs() {
-  const curM = $("#monthPicker").value;
-  const salary = +getLS(K.salary, "0");
-  const savingTarget = +getLS(K.saving, "0");
-  const st = getLS(K.settings, '{"cash":false,"auto":false,"roll":false}');
-
-  const instList = getLS(K.inst, "[]");
-  const billsList = getLS(K.bills, "[]");
-
-  let instTotal = 0,
-    billsTotal = 0;
-  [...instList, ...billsList].forEach((item) => {
-    const kind = instList.includes(item) ? "inst" : "bills"; // ملاحظة: هذا يعتمد على نفس مرجع المصفوفة
-    const dueAmt = dueThisMonth(item, curM);
-    if (dueAmt > 0) {
-      const paid = isPaid(kind, item.id, curM);
-      if (!st.cash || paid) {
-        if (kind === "inst") instTotal += dueAmt;
-        else billsTotal += dueAmt;
-      }
+    .table.responsive-stack thead {
+        display: none;
     }
-  });
 
-  const exps = getLS(K.exps, "[]")
-    .filter((x) => ym(x.date) === curM)
-    .reduce((s, x) => s + Number(x.amount || 0), 0);
-  const ones = getLS(K.one, "[]")
-    .filter((x) => ym(x.date) === curM && (!st.cash || x.paid))
-    .reduce((s, x) => s + Number(x.amount || 0), 0);
-  const carry = Number(getLS(K.roll, "{}")[curM] || 0);
-
-  const totalOut = instTotal + billsTotal + exps + ones + carry;
-  const actualSaving = salary - totalOut;
-  const net = actualSaving - savingTarget;
-
-  $("#kpiIncome").textContent = fmt(salary);
-  $("#kpiOut").textContent = fmt(totalOut);
-  $("#kpiSave").textContent = fmt(actualSaving);
-  $("#kpiNet").textContent = fmt(net);
-  $("#savingProgress").style.width = salary
-    ? Math.min(100, (savingTarget / salary) * 100) + "%"
-    : "0%";
-
-  const table = $("#monthSummary");
-  table.innerHTML = `
-    <thead><tr><th>البند</th><th class="fit">المبلغ</th><th class="fit">النسبة من الدخل</th></tr></thead>
-    <tbody>
-      <tr><td>💰 إجمالي الدخل</td><td class="fit font-bold">${fmt(
-        salary
-      )}</td><td class="fit">100%</td></tr>
-      <tr><td>🏦 الأقساط الثابتة</td><td class="fit">${fmt(
-        instTotal
-      )}</td><td class="fit">${
-    salary ? ((instTotal / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td>🧾 الفواتير الشهرية</td><td class="fit">${fmt(
-        billsTotal
-      )}</td><td class="fit">${
-    salary ? ((billsTotal / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td>💳 المصاريف اليومية</td><td class="fit">${fmt(
-        exps
-      )}</td><td class="fit">${
-    salary ? ((exps / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td>⚠️ المصاريف الخارجية</td><td class="fit">${fmt(
-        ones
-      )}</td><td class="fit">${
-    salary ? ((ones / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td>↩️ متأخرات مُرحّلة</td><td class="fit">${fmt(
-        carry
-      )}</td><td class="fit">${
-    salary ? ((carry / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr style="border-top:2px solid var(--border)"><td class="font-bold">💸 إجمالي المصروفات</td><td class="fit font-bold">${fmt(
-        totalOut
-      )}</td><td class="fit font-bold">${
-    salary ? ((totalOut / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td class="font-bold">🏦 الادخار الفعلي</td><td class="fit font-bold" style="color:${
-        actualSaving >= 0 ? "var(--success)" : "var(--danger)"
-      }">${fmt(actualSaving)}</td><td class="fit">${
-    salary ? ((actualSaving / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td>🎯 الادخار المستهدف</td><td class="fit">${fmt(
-        savingTarget
-      )}</td><td class="fit">${
-    salary ? ((savingTarget / salary) * 100).toFixed(1) : 0
-  }%</td></tr>
-      <tr><td class="font-bold">💵 الصافي المتبقي</td><td class="fit font-bold" style="color:${
-        net >= 0 ? "var(--success)" : "var(--danger)"
-      }">${fmt(net)}</td><td class="fit">—</td></tr>
-    </tbody>`;
-}
-
-// ===== Charts
-let monthlyChart, breakdownChart;
-function setupCharts() {
-  if (typeof Chart === "undefined") return;
-  Chart.defaults.font.family = `'Tajawal', system-ui, -apple-system, 'Segoe UI'`;
-  Chart.defaults.color =
-    getComputedStyle(document.documentElement).getPropertyValue("--ink") ||
-    "#e7ecf3";
-
-  const monthlyCtx = $("#chartMonthly");
-  const breakdownCtx = $("#chartBreakdown");
-
-  if (monthlyCtx) {
-    monthlyChart = new Chart(monthlyCtx, {
-      type: "line",
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: "الدخل",
-            data: [],
-            borderColor: "#22c55e",
-            backgroundColor: "rgba(34,197,94,.15)",
-            tension: 0.35,
-            fill: true,
-          },
-          {
-            label: "المصروفات",
-            data: [],
-            borderColor: "#ef4444",
-            backgroundColor: "rgba(239,68,68,.15)",
-            tension: 0.35,
-            fill: true,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { position: "bottom" }, title: { display: false } },
-      },
-    });
-  }
-  if (breakdownCtx) {
-    breakdownChart = new Chart(breakdownCtx, {
-      type: "doughnut",
-      data: {
-        labels: [],
-        datasets: [
-          {
-            data: [],
-            backgroundColor: [
-              "#4f8cff",
-              "#22c55e",
-              "#ef4444",
-              "#f59e0b",
-              "#8b5cf6",
-              "#10b981",
-              "#e11d48",
-              "#14b8a6",
-            ],
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { position: "bottom" }, title: { display: false } },
-      },
-    });
-  }
-  refreshCharts();
-}
-function refreshCharts() {
-  if (!monthlyChart || !breakdownChart) return;
-  const curM = $("#monthPicker").value;
-  // آخر 6 أشهر
-  const labels = [],
-    incomeData = [],
-    expenseData = [];
-  const [cy, cm] = curM.split("-").map(Number);
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(cy, cm - 1 - i, 1);
-    const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    labels.push(m);
-    const salary = +getLS(K.salary, "0");
-    incomeData.push(salary);
-    const inst = getLS(K.inst, "[]").reduce(
-      (s, it) => s + dueThisMonth(it, m),
-      0
-    );
-    const bills = getLS(K.bills, "[]").reduce(
-      (s, it) => s + dueThisMonth(it, m),
-      0
-    );
-    const exps = getLS(K.exps, "[]")
-      .filter((x) => ym(x.date) === m)
-      .reduce((s, x) => s + Number(x.amount || 0), 0);
-    const ones = getLS(K.one, "[]")
-      .filter((x) => ym(x.date) === m)
-      .reduce((s, x) => s + Number(x.amount || 0), 0);
-    const roll = Number(getLS(K.roll, "{}")[m] || 0);
-    expenseData.push(inst + bills + exps + ones + roll);
-  }
-  monthlyChart.data.labels = labels;
-  monthlyChart.data.datasets[0].data = incomeData;
-  monthlyChart.data.datasets[1].data = expenseData;
-  monthlyChart.update();
-
-  const exps = getLS(K.exps, "[]").filter((x) => ym(x.date) === curM);
-  const map = {};
-  exps.forEach((e) => {
-    const k = normCat(e.cat);
-    map[k] = (map[k] || 0) + Number(e.amount || 0);
-  });
-  breakdownChart.data.labels = Object.keys(map);
-  breakdownChart.data.datasets[0].data = Object.values(map);
-  breakdownChart.update();
-}
-
-// ===== Alerts + Auto + Rollover
-function updateAlerts() {
-  const curM = $("#monthPicker").value;
-  const alerts = [];
-  getLS(K.inst, "[]").forEach((item) => {
-    const due = dueThisMonth(item, curM);
-    if (due > 0 && !isPaid("inst", item.id, curM)) {
-      const d = daysUntilDue(item, curM);
-      if (d >= 0 && d <= 3)
-        alerts.push(`⏰ ${item.name} (قسط) مستحق خلال ${d} يومًا.`);
-      if (d < 0) alerts.push(`⚠️ ${item.name} (قسط) متأخر الدفع.`);
+    .table.responsive-stack tr {
+        display: block;
+        margin: 12px 8px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+        background: transparent;
     }
-  });
-  getLS(K.bills, "[]").forEach((item) => {
-    const due = dueThisMonth(item, curM);
-    if (due > 0 && !isPaid("bills", item.id, curM)) {
-      const d = daysUntilDue(item, curM);
-      if (d >= 0 && d <= 3)
-        alerts.push(`⏰ ${item.name} (فاتورة) مستحقة خلال ${d} يومًا.`);
-      if (d < 0) alerts.push(`⚠️ ${item.name} (فاتورة) متأخرة الدفع.`);
+
+    .table.responsive-stack td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-inline-start: 42%;
+        position: relative;
+        white-space: normal;
+        border-bottom: 1px solid var(--border);
     }
-  });
 
-  const badge = $("#alertBadge");
-  if (!badge) return;
-  if (alerts.length) {
-    badge.textContent = `${alerts.length} تنبيهات`;
-    badge.style.display = "inline-block";
-    badge.onclick = () => showToast(alerts.join("<br>"), "warning");
-  } else {
-    badge.style.display = "none";
-  }
-}
-function autoDeductIfDue(yyyymm) {
-  const cur = ym(new Date());
-  if (cur !== yyyymm) return;
-  [...getLS(K.inst, "[]"), ...getLS(K.bills, "[]")].forEach((item) => {
-    const kind = getLS(K.inst, "[]").includes(item) ? "inst" : "bills";
-    const dueAmt = dueThisMonth(item, yyyymm);
-    if (dueAmt > 0 && !isPaid(kind, item.id, yyyymm)) {
-      const d = daysUntilDue(item, yyyymm);
-      if (d <= 0) setPaid(kind, item.id, yyyymm, true);
+    .table.responsive-stack td::before {
+        content: attr(data-label);
+        position: absolute;
+        inset-inline-start: 12px;
+        width: 38%;
+        white-space: nowrap;
+        font-weight: 700;
+        color: var(--muted);
+        text-align: right;
     }
-  });
-}
-function rolloverArrears(yyyymm) {
-  const prev = prevMonthStr(yyyymm);
-  let total = 0;
-  [...getLS(K.inst, "[]"), ...getLS(K.bills, "[]")].forEach((item) => {
-    const kind = getLS(K.inst, "[]").includes(item) ? "inst" : "bills";
-    const due = dueThisMonth(item, prev);
-    if (due > 0 && !isPaid(kind, item.id, prev)) total += due;
-  });
-  const R = getLS(K.roll, "{}");
-  R[yyyymm] = total;
-  setLS(K.roll, R);
-  if (total > 0)
-    showToast(
-      `↩️ تم ترحيل متأخرات بقيمة ${fmt(total)} من الشهر السابق.`,
-      "warning"
-    );
+
+    .table.responsive-stack td:last-child {
+        border-bottom: 0;
+    }
+
+    /* أزرار الجدول تصير صفّين عند الضيق */
+    .table.responsive-stack td .flex {
+        flex-wrap: wrap;
+    }
+
+    .table.responsive-stack td .btn {
+        flex: 1 1 140px;
+        min-width: 0;
+    }
 }
 
-// ===== Export
-function exportCSV(month, search = "") {
-  const rows = getLS(K.exps, "[]").filter(
-    (x) =>
-      ym(x.date) === month &&
-      (!search ||
-        normCat(x.cat).includes(search.toLowerCase()) ||
-        normCat(x.note).includes(search.toLowerCase()))
-  );
-  if (!rows.length) return showToast("🤷 لا توجد بيانات للتصدير", "warning");
-  const csv = [
-    "التاريخ,التصنيف,الوصف,طريقة الدفع,المبلغ",
-    ...rows.map((r) =>
-      [r.date, r.cat, r.note || "", r.pay, r.amount].join(",")
-    ),
-  ].join("\n");
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(
-    new Blob([csv], { type: "text/csv;charset=utf-8" })
-  );
-  a.download = `expenses_${month}.csv`;
-  a.click();
-  showToast("✅ تم تصدير CSV", "success");
-}
-function exportJSON() {
-  const data = {
-    salary: getLS(K.salary, "0"),
-    saving: getLS(K.saving, "0"),
-    settings: getLS(K.settings, '{"cash":false,"auto":false,"roll":false}'),
-    installments: getLS(K.inst, "[]"),
-    bills: getLS(K.bills, "[]"),
-    expenses: getLS(K.exps, "[]"),
-    one: getLS(K.one, "[]"),
-    budgets: getLS(K.budgets, "[]"),
-    paidMap: getLS(K.paid, "{}"),
-    rollovers: getLS(K.roll, "{}"),
-  };
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(
-    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
-  );
-  a.download = `my-finance-${$("#monthPicker").value}.json`;
-  a.click();
-  showToast("✅ تم تصدير JSON", "success");
+/* صف "لا توجد بيانات" */
+.table.responsive-stack td.muted {
+    display: block;
+    text-align: center;
+    padding: 18px 12px;
+    border: 0 !important;
 }
 
-// ===== Budget warning
-function checkBudgetWarn(catRaw) {
-  const curM = $("#monthPicker").value,
-    cat = normCat(catRaw);
-  const B = getLS(K.budgets, "[]");
-  const budget = B.find((b) => normCat(b.cat) === cat);
-  if (!budget) return;
-  const spent = getLS(K.exps, "[]")
-    .filter((x) => ym(x.date) === curM && normCat(x.cat) === cat)
-    .reduce((s, x) => s + Number(x.amount || 0), 0);
-  if (!budget.limit) return;
-  const used = (spent / budget.limit) * 100;
-  if (used >= 100)
-    showToast(
-      `🚫 تجاوزت ميزانية "${budget.cat}" (${used.toFixed(0)}%)`,
-      "danger"
-    );
-  else if (used >= 80)
-    showToast(
-      `⚠️ اقتربت من ميزانية "${budget.cat}" (${used.toFixed(0)}%)`,
-      "warning"
-    );
+.table.responsive-stack td.muted::before {
+    content: '';
 }
 
-// ===== Router (hash)
-const ROUTES = [
-  "summary",
-  "installments",
-  "bills",
-  "expenses",
-  "one-time",
-  "settings",
-];
-const sections = Array.from(document.querySelectorAll("[data-route]"));
-const navLinks = Array.from(
-  document.querySelectorAll(".bottom-nav .nav-links a")
-);
-const fabBtn = document.getElementById("openModalBtn");
-const stateKey = (r) => `moneyapp_state_${r}`;
-const scrollKey = (r) => `moneyapp_scroll_${r}`;
-let currentRoute = null;
+.table.responsive-stack tr {
+    background: transparent;
+}
 
-function applyActive(r) {
-  navLinks.forEach((a) => {
-    const hash = a.getAttribute("href").replace("#", "");
-    a.classList.toggle("active", hash === r);
-  });
+@supports selector(:has(*)) {
+    .table.responsive-stack tr:has(td.muted) {
+        border: 0;
+    }
 }
-function fabConfig(route) {
-  const map = {
-    installments: {
-      label: "＋",
-      title: "إضافة قسط",
-      action: () => openForm("instForm"),
-    },
-    bills: {
-      label: "＋",
-      title: "إضافة فاتورة",
-      action: () => openForm("billForm"),
-    },
-    expenses: {
-      label: "＋",
-      title: "إضافة مصروف",
-      action: () => openForm("expForm"),
-    },
-    "one-time": {
-      label: "＋",
-      title: "مصروف خارجي",
-      action: () => openForm("oneForm"),
-    },
-    summary: {
-      label: "＋",
-      title: "إضافة سريعة",
-      action: () => openQuickAdd(),
-    },
-    settings: {
-      label: "＋",
-      title: "اختصار سريع",
-      action: () => openQuickAdd(),
-    },
-  };
-  return map[route] || map.summary;
+
+/* ========================= Chips (الحالات) ========================= */
+.chip {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12.5px;
+    font-weight: 700;
+    border: 1px solid transparent;
 }
-function showRoute(r) {
-  if (!ROUTES.includes(r)) r = "summary";
-  if (currentRoute) {
-    localStorage.setItem(scrollKey(currentRoute), String(window.scrollY || 0));
+
+.chip.green {
+    background: rgba(34, 197, 94, .18);
+    color: #22c55e;
+    border-color: rgba(34, 197, 94, .4);
+}
+
+.chip.orange {
+    background: rgba(249, 115, 22, .18);
+    color: #ea580c;
+    border-color: rgba(249, 115, 22, .4);
+}
+
+.chip.red {
+    background: rgba(239, 68, 68, .18);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, .4);
+}
+
+.chip.warning {
+    background: rgba(245, 158, 11, .18);
+    color: #d97706;
+    border-color: rgba(245, 158, 11, .4);
+}
+
+.chip.blue {
+    background: rgba(59, 130, 246, .18);
+    color: #3b82f6;
+    border-color: rgba(59, 130, 246, .4);
+}
+
+.chip.gray {
+    background: rgba(148, 163, 184, .2);
+    color: #64748b;
+    border-color: rgba(148, 163, 184, .35);
+}
+
+/* ========================= Toast ========================= */
+.toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    padding: 14px 18px;
+    border-radius: 12px;
+    color: #fff;
+    z-index: 1000;
+    box-shadow: var(--shadow-lg);
+    display: none;
+}
+
+.toast.success {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.toast.warning {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.toast.danger {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+/* ========================= الـ FAB (+) ========================= */
+.fab {
+    position: fixed;
+    right: calc(12px + env(safe-area-inset-right));
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    width: clamp(52px, 6.2vw, 62px);
+    height: clamp(52px, 6.2vw, 62px);
+    border-radius: 18px;
+    font-size: clamp(22px, 2.6vw, 28px);
+    font-weight: 800;
+    background: var(--gradient-primary);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 16px 44px rgba(99, 102, 241, .28);
+    z-index: 1200;
+    cursor: pointer;
+    transition: transform .2s ease, box-shadow .2s ease;
+    border: none;
+}
+
+.fab:hover {
+    transform: scale(1.06) rotate(3deg);
+}
+
+@media (max-width: 480px) {
+    .fab {
+        border-radius: 16px;
+    }
+}
+
+/* ========================= المودال / الشيت ========================= */
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .55);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 1300;
+}
+
+.modal.show {
+    display: flex;
+}
+
+.sheet {
+    width: min(940px, 100vw);
+    max-height: 92vh;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    padding: 16px 14px 20px;
+    overflow: auto;
+    animation: sheetUp .28s ease-out;
+}
+
+@keyframes sheetUp {
+    from {
+        transform: translateY(18px);
+        opacity: .6;
+    }
+
+    to {
+        transform: none;
+        opacity: 1;
+    }
+}
+
+:root.light .sheet {
+    background: #fff;
+}
+
+/* مقبض */
+.handle {
+    position: sticky;
+    top: 8px;
+    margin: 0 auto 8px;
+    width: 42px;
+    height: 5px;
+    background: var(--border);
+    border-radius: 999px;
+}
+
+/* زر إغلاق ✕ — مضبوط للجوال */
+#closeModal.btn.ghost {
+    position: sticky !important;
+    inset-block-start: 8px;
+    margin-inline-start: auto;
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: #475569;
+    font-size: 18px;
+    line-height: 1;
+    box-shadow: var(--shadow);
+}
+
+:root:not(.light) #closeModal.btn.ghost {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+/* داخل المودال */
+.modal .grid {
+    display: grid;
+    gap: 12px;
+}
+
+.modal .grid.grid-cols-responsive {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+}
+
+.modal .card {
+    background: var(--glass);
+    border-radius: 16px;
+    padding: 14px;
+}
+
+.modal .card h2 {
+    margin: 0 0 8px;
+    font-size: 16px;
+}
+
+/* شاشات منخفضة الارتفاع (أفقي جوال) */
+@media (max-height: 580px) {
+    .sheet {
+        max-height: 86vh;
+        padding-bottom: 10px;
+    }
+
+    .modal .card {
+        padding: 10px;
+    }
+
+    .toolbar {
+        gap: 8px;
+    }
+}
+
+/* ========================= الشريط السفلي ========================= */
+.bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(17, 24, 39, .88);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    z-index: 100;
+    padding-inline-start: 12px;
+    padding-inline-end: calc(12px + env(safe-area-inset-right));
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.bottom-nav::-webkit-scrollbar {
+    display: none;
+}
+
+:root.light .bottom-nav {
+    background: rgba(255, 255, 255, .92);
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, .06);
+}
+
+.bottom-nav .nav-links {
+    display: flex;
+    justify-content: space-around;
+    gap: 6px;
+}
+
+.bottom-nav a {
+    color: var(--muted);
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 10px;
+    transition: .2s;
+    min-width: 76px;
+}
+
+.bottom-nav a.active,
+.bottom-nav a:hover {
+    color: var(--primary);
+    background: rgba(46, 144, 250, .1);
+}
+
+.bottom-nav a .icon {
+    font-size: 18px;
+}
+
+.nav-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: nowrap;
+}
+
+.nav-actions .action-btn {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    white-space: nowrap;
+}
+
+.nav-actions .action-btn.primary {
+    background: var(--gradient-primary);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 10px 24px rgba(99, 102, 241, .25);
+}
+
+@media (max-width: 480px) {
+    .nav-actions .action-btn {
+        font-size: 11px;
+        padding: 6px 10px;
+        border-radius: 9px;
+    }
+}
+
+/* ========================= Utils ========================= */
+.flex {
+    display: flex;
+}
+
+.gap-2 {
+    gap: 8px;
+}
+
+.gap-4 {
+    gap: 16px;
+}
+
+.mt-2 {
+    margin-top: 8px;
+}
+
+.mt-4 {
+    margin-top: 16px;
+}
+
+.mb-2 {
+    margin-bottom: 8px;
+}
+
+.mb-4 {
+    margin-bottom: 16px;
+}
+
+/* إجمالي المصاريف */
+.total-display {
+    margin-inline-start: auto;
+    font-weight: 800;
+}
+
+/* تصحيح لمحرّكات iOS داخل المودال */
+@supports (-webkit-touch-callout: none) {
+    .sheet {
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+/* --- تحسينات تباين داخل الكروت والحقول --- */
+.kpi,
+.chart-container,
+.table-container {
+    background: rgba(255, 255, 255, .06);
+}
+
+:root.light .kpi,
+:root.light .chart-container,
+:root.light .table-container {
+    background: #fff;
+}
+
+/* ===== مساحة تحت المحتوى حتى ما يختفي خلف الشريط ===== */
+html,
+body {
+    overflow-x: hidden;
+}
+
+body {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom));
+}
+
+/* ========================= استجابة إضافية (XS → XL) ========================= */
+/* شاشات صغيرة جداً (<=360px) */
+@media (max-width: 360px) {
+    .title h1 {
+        font-size: 17px;
+    }
+
+    .btn {
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+
+    .kpi .val {
+        font-size: 20px;
+    }
+
+    .table.responsive-stack td {
+        padding-inline-start: 46%;
+    }
+
+    .bottom-nav a {
+        min-width: 70px;
+    }
+}
+
+/* شاشات متوسطة (>=768px) */
+@media (min-width: 768px) {
+    .container {
+        gap: 18px;
+    }
+
+    .kpi .val {
+        font-size: 24px;
+    }
+
+    .charts {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* شاشات كبيرة (>=1024px) */
+@media (min-width: 1024px) {
+    .grid.cols-2 {
+        grid-template-columns: 1.1fr .9fr;
+    }
+
+    .grid.cols-3 {
+        grid-template-columns: 1.2fr .9fr .9fr;
+    }
+
+    .bottom-nav {
+        grid-template-columns: 1fr auto;
+    }
+}
+
+/* شاشات ضخمة (>=1440px) */
+@media (min-width: 1440px) {
+    .kpi .val {
+        font-size: 26px;
+    }
+
+    .fab {
+        bottom: calc(96px + env(safe-area-inset-bottom));
+    }
+}
+
+/* ========================= إمكانية الوصول ========================= */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation: none !important;
+        transition: none !important;
+    }
+
+    .fab:hover {
+        transform: none;
+    }
+}
+
+/* ===== Extra Responsive Hardening (all phones/foldables/tablets) ===== */
+
+/* 1) هواتف أضيق من 360px */
+@media (max-width: 360px){
+  .title h1{ font-size: 16px; }
+  .toolbar .grow{ flex: 1 1 120px; }
+  .table.responsive-stack td{ padding-inline-start: 38%; }
+  .bottom-nav .nav-links a{ min-width: 68px; }
+  .fab{ width: 52px; height: 52px; bottom: calc(84px + env(safe-area-inset-bottom)); }
+}
+
+/* 2) 361–400px: ضبط خفيف */
+@media (min-width: 361px) and (max-width: 400px){
+  .table.responsive-stack td{ padding-inline-start: 40%; }
+  .bottom-nav .nav-links a{ min-width: 72px; }
+}
+
+/* 3) 401–480px: فئة شائعة */
+@media (min-width: 401px) and (max-width: 480px){
+  .table.responsive-stack td{ padding-inline-start: 42%; }
+  .nav-actions .action-btn{ font-size: 11px; padding: 6px 10px; }
+}
+
+/* 4) 481–600px: فابلت/كبيرة */
+@media (min-width: 481px) and (max-width: 600px){
+  .grid-cols-responsive{ grid-template-columns: repeat(auto-fit, minmax(min(100%,420px), 1fr)); }
+  .fab{ bottom: calc(88px + env(safe-area-inset-bottom)); }
+}
+
+/* 5) Foldables مطوي/مفتوح (عرض متوسط) */
+@media (min-width: 540px) and (max-width: 820px){
+  .container{ max-width: 980px; }
+  .grid-cols-responsive{ grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+}
+
+/* 6) تابلت صغير 600–768 */
+@media (min-width: 600px) and (max-width: 768px){
+  .grid.cols-2,.grid.cols-3{ grid-template-columns: 1fr 1fr; }
+}
+
+/* 7) تابلت قياسي 768–1024 */
+@media (min-width: 768px) and (max-width: 1024px){
+  .grid.cols-3{ grid-template-columns: 1fr 1fr; }
+  .sheet{ max-height: 90vh; }
+}
+
+/* 8) لابتوب خفيف 1024–1280 (زيادة راحة) */
+@media (min-width: 1024px) and (max-width: 1280px){
+  .container{ max-width: 1120px; }
+}
+
+/* 9) لاندسكيب على الهواتف/الفولد */
+@media (orientation: landscape){
+  .sheet{ max-height: 88vh; }
+  .fab{ bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .bottom-nav{ padding-block: 8px; }
+}
+
+/* 10) تحسينات وصول ولمس */
+@media (hover: none){
+  .btn{ min-height: 44px; }
+}
+
+/* ====================== تحسينات رسبونسف إضافية ====================== */
+/* نتحكم في عرض عمود اللابل كنسبة قابلة للتغيير */
+:root { --stack-label-w: 38%; }               /* الافتراضي */
+@media (max-width: 540px) { :root { --stack-label-w: 34%; } }
+@media (max-width: 430px) { :root { --stack-label-w: 30%; } }
+@media (max-width: 380px) { :root { --stack-label-w: 27%; } }
+
+/* جدول الـ stack (جوال) – استخدم المتغيّر بدل رقم ثابت */
+@media (max-width: 768px){
+  .table.responsive-stack td{
+    padding-inline-start: calc(var(--stack-label-w) + 12px);
   }
-  sections.forEach(
-    (s) => (s.style.display = s.dataset.route === r ? "" : "none")
-  );
-  applyActive(r);
-  currentRoute = r;
+  .table.responsive-stack td::before{
+    width: var(--stack-label-w);
+  }
+}
 
-  const cfg = fabConfig(r);
-  if (fabBtn) {
-    fabBtn.textContent = cfg.label;
-    fabBtn.setAttribute("aria-label", cfg.title);
-    fabBtn.onclick = cfg.action;
+/* صف لا توجد بيانات – يبقى سطر واحد صغير بدون صندوق داخلي */
+.table.responsive-stack tr:has(td.muted){ border: 0; }
+.table.responsive-stack td.muted{
+  display:block; border:0 !important; text-align:center; padding:14px 10px;
+}
+.table.responsive-stack td.muted::before{ content:''; }
+
+/* الكروت والجداول: خفّف الخلفية على الدارك وزوّد التباين على اللايت */
+.kpi,.chart-container,.table-container{ background: rgba(255,255,255,.06); }
+:root.light .kpi,
+:root.light .chart-container,
+:root.light .table-container{ background:#fff; }
+
+/* أزرار الإجراءات داخل الجداول ما تلتف بصعوبة */
+.table .fit .btn{ white-space:nowrap; }
+
+/* الشريط السفلي: تمرير أفقي آمن + إخفاء أزرار الأكشن تحت 360px */
+.bottom-nav{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.bottom-nav .nav-actions{ gap:8px; }
+@media (max-width: 360px){
+  .bottom-nav .nav-actions{ display:none; }
+}
+
+/* الـ FAB دائمًا داخل الشاشة فوق الشريط */
+.fab{
+  right: calc(12px + env(safe-area-inset-right));
+  bottom: calc(84px + env(safe-area-inset-bottom));
+}
+@media (max-width: 390px){
+  .fab{ width:56px; height:56px; font-size:26px; }
+}
+
+/* أحجام خطوط متكيّفة لعناوين الكروت وقيم الـKPI */
+.card h2{ font-size: clamp(15px, 2.8vw, 20px); }
+.kpi .val{ font-size: clamp(18px, 2.4vw, 22px); }
+
+/* حقول الإدخال: ألوان أوضح بنوري/داكن */
+:root{ --input-bg: rgba(255,255,255,.06); --input-ring: rgba(46,144,250,.22); }
+:root.light{ --input-bg:#fff; --input-ring: rgba(99,102,241,.18); }
+input,select,textarea{
+  background: var(--input-bg);
+  box-shadow: 0 0 0 0 transparent;
+}
+input:focus,select:focus,textarea:focus{
+  box-shadow: 0 0 0 3px var(--input-ring);
+}
+
+/* مساحة سفلية تمنع التداخل مع الشريط */
+body{ padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+
+/* إصلاحات iOS داخل المودال */
+@supports (-webkit-touch-callout:none){ .sheet{ -webkit-overflow-scrolling:touch; } }
+
+/* ===== Bottom Nav + FAB (RTL Ready) ===== */
+:root{
+  --bn-h: clamp(56px, 9vh, 72px);   /* ارتفاع الشريط */
+  --bn-pad: 12px;
+  --fab: 62px;                      /* مقاس زر الإضافة */
+  --gap: 10px;
+}
+
+/* مساحة أسفل الصفحة حتى لا يغطي الشريط المحتوى */
+body{
+  padding-bottom: calc(var(--bn-h) + 12px + env(safe-area-inset-bottom));
+}
+
+/* الشريط السفلي */
+.bottom-nav{
+  position: fixed; inset-inline: 0; bottom: 0;
+  height: calc(var(--bn-h) + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+
+  display: flex; align-items: center; gap: var(--gap);
+  padding: 8px var(--bn-pad);
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+
+  background: var(--glass);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -8px 24px rgba(15,23,42,.06);
+  z-index: 1000;
+}
+
+/* لما يكون فيه FAB: نترك حيّز بالجهة الأخيرة (يمين في RTL) */
+.bottom-nav.has-fab{
+  padding-inline-end: calc(var(--bn-pad) + var(--fab) + 14px + env(safe-area-inset-right));
+}
+
+/* روابط التنقل */
+.bottom-nav .nav-links{
+  flex: 1 1 auto;
+  display: flex; gap: 8px; min-width: 0;
+  overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.bottom-nav .nav-links::-webkit-scrollbar{ display:none; }
+
+.bottom-nav .nav-links a{
+  flex: 0 0 auto;
+  min-width: 78px;
+  text-decoration: none;
+  color: var(--muted);
+  display: flex; flex-direction: column; align-items: center;
+  gap: 2px; font-size: 11px; padding: 6px 10px; border-radius: 10px;
+  transition: .2s background, .2s color;
+}
+.bottom-nav .nav-links a.active,
+.bottom-nav .nav-links a:hover{
+  color: var(--primary);
+  background: rgba(46,144,250,.10);
+}
+.bottom-nav .nav-links a .icon{ font-size: 18px; }
+
+/* أزرار الأكشن (اختياري) */
+.bottom-nav .nav-actions{ display:flex; gap:8px; flex: 0 0 auto; }
+.bottom-nav .action-btn{
+  appearance:none; border:1px solid var(--border);
+  background: var(--gradient-primary); color:#fff;
+  padding: 8px 12px; border-radius: 10px; font-weight:700; font-size:12px;
+  white-space: nowrap; box-shadow: 0 10px 24px rgba(99,102,241,.25);
+}
+
+/* شاشات صغيرة جدًا: نخفي الأكشن */
+@media (max-width: 370px){
+  .bottom-nav .nav-actions{ display:none; }
+}
+
+/* زر الإضافة (داخل مربع قزاز) */
+.fab{
+  position: fixed;
+  inset-inline-end: calc(var(--bn-pad) + env(safe-area-inset-right));
+  bottom: calc(var(--bn-h) + 14px + env(safe-area-inset-bottom));
+  width: var(--fab); height: var(--fab);
+  border-radius: 16px;
+  display: grid; place-items: center;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  box-shadow: 0 14px 28px rgba(15,23,42,.20);
+  font-size: 28px; color: var(--ink);
+  z-index: 1200;
+}
+@media (max-width: 390px){
+  :root{ --fab: 56px; }
+}
+
+/* ===== Stack rows fill width on mobile ===== */
+@media (max-width: 768px){
+  /* لا padding داخلي للوعاء */
+  .table-container{ padding: 0; }
+
+  /* الصف بطاقة ممتدة بعرض الحاوية */
+  .table.responsive-stack tr{
+    display: block;
+    margin-block: 8px;        /* مسافة بين البطاقات */
+    margin-inline: 0;         /* أهم سطر: بدون فراغ يمين/يسار */
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    background: rgba(59,130,246,.08);   /* الأزرق الخفيف */
+  }
+  .table.responsive-stack tr:hover{
+    background: rgba(59,130,246,.14);
   }
 
-  const prev = Number(localStorage.getItem(scrollKey(r) || "0")) || 0;
-  window.scrollTo({ top: prev, behavior: "instant" });
-}
-function onHash() {
-  showRoute((location.hash || "#summary").slice(1));
-}
-function openForm(id) {
-  $("#openModalBtn").click();
-  setTimeout(
-    () => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }),
-    60
-  );
-}
-function openQuickAdd() {
-  $("#openModalBtn").click();
+  /* كل خلية سطر بعناوين على اليمين */
+  .table.responsive-stack td{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px 10px calc(var(--stack-label-w) + 10px);
+    white-space: normal;
+  }
+  .table.responsive-stack td:last-child{ border-bottom: 0; }
+
+  .table.responsive-stack td::before{
+    width: var(--stack-label-w);
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  /* أشياء ما نبيها تتكسر للسطر الثاني (تمنع فراغات غريبة) */
+  .table.responsive-stack td[data-label="المبلغ"],
+  .table.responsive-stack td[data-label="الدفع"],
+  .table.responsive-stack td[data-label="استحقاق هذا الشهر"],
+  .table.responsive-stack td .fit{ white-space: nowrap; }
+
+  .chip{ padding: 3px 8px; line-height: 1.1; }
 }
 
-// ===== Detailed Report
-function totalsForMonth(yyyymm) {
-  const salary = +getLS(K.salary, "0");
-  const st = getLS(K.settings, '{"cash":false,"auto":false,"roll":false}');
-  const inst = getLS(K.inst, "[]").reduce(
-    (s, it) => s + dueThisMonth(it, yyyymm),
-    0
-  );
-  const bills = getLS(K.bills, "[]").reduce(
-    (s, it) => s + dueThisMonth(it, yyyymm),
-    0
-  );
-  const exps = getLS(K.exps, "[]")
-    .filter((x) => ym(x.date) === yyyymm)
-    .reduce((s, x) => s + Number(x.amount || 0), 0);
-  const ones = getLS(K.one, "[]")
-    .filter((x) => ym(x.date) === yyyymm && (!st.cash || x.paid))
-    .reduce((s, x) => s + Number(x.amount || 0), 0);
-  const carry = Number(getLS(K.roll, "{}")[yyyymm] || 0);
-  const out = inst + bills + exps + ones + carry;
-  const saveActual = salary - out;
-  return { salary, inst, bills, exps, ones, carry, out, saveActual };
-}
-function fmtPct(n, d) {
-  return d ? ((n / d) * 100).toFixed(1) : "0.0";
+/* تحكم أدق بعرض عمود اللّيبل */
+:root{ --stack-label-w: 26%; }
+@media (max-width: 540px){ :root{ --stack-label-w: 24%; } }
+@media (max-width: 430px){ :root{ --stack-label-w: 22%; } }
+@media (max-width: 380px){ :root{ --stack-label-w: 20%; } }
+
+/* ===== iPhone 15 Pro/Max & iOS Safari polish (paste at the very end) ===== */
+
+/* 1) شدّ الصفوف لتملأ العرض + أزرق full-bleed */
+@supports (-webkit-touch-callout:none){
+  @media (max-width: 768px){
+    .table-container{ padding:0 !important; }
+
+    .table.responsive-stack tr{
+      margin-inline: 0 !important;     /* أهم سطر: بدون فراغ جانبي */
+      display:block !important;
+      border:1px solid var(--border);
+      border-radius:14px;
+      overflow:hidden;
+      background: rgba(59,130,246,.08);          /* الأزرق */
+    }
+    .table.responsive-stack tr:hover{
+      background: rgba(59,130,246,.14);
+    }
+
+    .table.responsive-stack td{
+      display:flex !important;
+      align-items:center;
+      gap:8px;
+      border-bottom:1px solid var(--border);
+      padding:10px 12px 10px calc(var(--stack-label-w) + 10px) !important;
+    }
+    .table.responsive-stack td:last-child{ border-bottom:0; }
+
+    .table.responsive-stack td::before{
+      width: var(--stack-label-w) !important;
+      font-size:12.5px;
+      color:var(--muted);
+    }
+
+    /* لا تنكسر الأجزاء الحساسة لسطرين */
+    .table.responsive-stack td[data-label="المبلغ"],
+    .table.responsive-stack td[data-label="الدفع"],
+    .table.responsive-stack td[data-label="استحقاق هذا الشهر"],
+    .table.responsive-stack td .fit{ white-space: nowrap !important; }
+
+    .chip{ padding:3px 8px; line-height:1.1; }
+  }
 }
 
-function openDetailedReport() {
-  const m = $("#monthPicker").value;
-  const t = totalsForMonth(m);
-  const now = new Date();
-  const byCat = {};
-  getLS(K.exps, "[]")
-    .filter((x) => ym(x.date) === m)
-    .forEach((e) => {
-      const k = normCat(e.cat);
-      byCat[k] = (byCat[k] || 0) + Number(e.amount || 0);
-    });
-  let rows = Object.entries(byCat)
-    .sort((a, b) => b[1] - a[1])
-    .map(
-      ([catKey, amt]) =>
-        `<tr><td>${catKey}</td><td class="fit">${fmt(
-          amt
-        )}</td><td class="fit">${fmtPct(amt, t.salary)}%</td></tr>`
-    )
-    .join("");
-  if (!rows)
-    rows = `<tr><td colspan="3" class="muted">لا توجد مصروفات بعد.</td></tr>`;
-  const html = `
-  <html lang="ar" dir="rtl"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>التقرير المالي المفصّل ${m}</title>
-  <style>
-    body{background:#0b1220;color:#e7ecf3;font-family:'Tajawal',system-ui;margin:24px}
-    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:16px 0}
-    .card{padding:16px;border-radius:14px;background:#101827;border:1px solid #1f2937;text-align:center}
-    .ok{color:#22c55e}.bad{color:#ef4444}
-    table{width:100%;border-collapse:collapse;margin-top:16px}
-    th,td{border-bottom:1px solid #1f2937;padding:10px}
-    .fit{white-space:nowrap}.muted{opacity:.7} h1{margin:0 0 6px} .section-title{margin-top:22px}
-    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#111827;border:1px solid #1f2937;font-size:12px}
-  </style></head><body>
-    <h1>📊 التقرير المالي المفصّل</h1>
-    <div class="muted">شهر ${m} — تم إنشاؤه في ${now.toLocaleString(
-    "ar-SA"
-  )}</div>
-    <div class="cards">
-      <div class="card"><div>إجمالي الدخل</div><div class="ok" style="font-size:24px">${fmt(
-        t.salary
-      )}</div></div>
-      <div class="card"><div>إجمالي المصروفات</div><div class="bad" style="font-size:24px">${fmt(
-        t.out
-      )}</div></div>
-      <div class="card"><div>الادخار الفعلي</div><div class="${
-        t.saveActual >= 0 ? "ok" : "bad"
-      }" style="font-size:24px">${fmt(t.saveActual)}</div></div>
-      <div class="card"><div>الأقساط والفواتير</div><div style="font-size:24px">${fmt(
-        t.inst + t.bills
-      )}</div><div class="pill">أقساط: ${fmt(t.inst)} — فواتير: ${fmt(
-    t.bills
-  )}</div></div>
-    </div>
-    <h2 class="section-title">تفصيل المصروفات حسب التصنيف</h2>
-    <table><thead><tr><th>الفئة</th><th class="fit">المبلغ</th><th class="fit">النسبة من الدخل</th></tr></thead><tbody>${rows}</tbody></table>
-    <h2 class="section-title">معلومات إضافية</h2>
-    <div class="pill">المصاريف الخارجيّة: ${fmt(t.ones)}</div>
-    <div class="pill">متأخرات مُرحّلة: ${fmt(t.carry)}</div>
-  </body></html>`;
-  const w = window.open("about:blank");
-  w.document.write(html);
-  w.document.close();
-}
-function openCompare() {
-  const cur = $("#monthPicker").value;
-  const prev = prevMonthStr(cur);
-  const a = totalsForMonth(prev);
-  const b = totalsForMonth(cur);
-  const row = (label, va, vb) => {
-    const diff = vb - va;
-    const sign = diff === 0 ? "" : diff > 0 ? "▲" : "▼";
-    const color = diff > 0 ? "#ef4444" : diff < 0 ? "#22c55e" : "#9ca3af";
-    return `<tr><td>${label}</td><td class="fit">${fmt(
-      va
-    )}</td><td class="fit">${fmt(
-      vb
-    )}</td><td class="fit" style="color:${color}">${fmt(
-      diff
-    )} ${sign}</td></tr>`;
-  };
-  const html = `
-  <html lang="ar" dir="rtl"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>مقارنة الأشهر ${cur} مقابل ${prev}</title>
-  <style>
-    body{background:#0b1220;color:#e7ecf3;font-family:'Tajawal',system-ui;margin:24px}
-    h1{margin:0 0 14px}.muted{opacity:.7}
-    table{width:100%;border-collapse:collapse;margin-top:16px} th,td{border-bottom:1px solid #1f2937;padding:10px}
-    .fit{white-space:nowrap}
-    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:16px 0}
-    .card{padding:16px;border-radius:14px;background:#101827;border:1px solid #1f2937}
-    .ok{color:#22c55e}.bad{color:#ef4444}
-  </style></head><body>
-    <h1>📈 مقارنة الأشهر</h1>
-    <div class="muted">${prev} مقابل ${cur}</div>
-    <div class="cards">
-      <div class="card"><div>ادخار فعلي (السابق)</div><div class="${
-        a.saveActual >= 0 ? "ok" : "bad"
-      }" style="font-size:22px">${fmt(a.saveActual)}</div></div>
-      <div class="card"><div>ادخار فعلي (الحالي)</div><div class="${
-        b.saveActual >= 0 ? "ok" : "bad"
-      }" style="font-size:22px">${fmt(b.saveActual)}</div></div>
-      <div class="card"><div>إجمالي المصروفات (السابق)</div><div class="bad" style="font-size:22px">${fmt(
-        a.out
-      )}</div></div>
-      <div class="card"><div>إجمالي المصروفات (الحالي)</div><div class="bad" style="font-size:22px">${fmt(
-        b.out
-      )}</div></div>
-    </div>
-    <table>
-      <thead><tr><th>البند</th><th class="fit">${prev}</th><th class="fit">${cur}</th><th class="fit">الفرق</th></tr></thead>
-      <tbody>
-        ${row("الأقساط + الفواتير", a.inst + a.bills, b.inst + b.bills)}
-        ${row("المصروفات اليومية", a.exps, b.exps)}
-        ${row("المصاريف الخارجيّة", a.ones, b.ones)}
-        ${row("متأخرات مُرحّلة", a.carry, b.carry)}
-        ${row("إجمالي المصروفات", a.out, b.out)}
-        ${row("الادخار الفعلي", a.saveActual, b.saveActual)}
-      </tbody>
-    </table>
-  </body></html>`;
-  const w = window.open("about:blank");
-  w.document.write(html);
-  w.document.close();
+/* 2) ضبط خاص لـ 430px (iPhone 15/Pro/Max) لتقليل مساحة عمود اللّيبل */
+@media (min-width: 420px) and (max-width: 460px){
+  :root{ --stack-label-w: 22% !important; }  /* كان 26% → يقلّل الفراغ داخل الخلية */
 }
 
-// ===== Boot
-document.addEventListener("DOMContentLoaded", () => {
-  $("#monthPicker").value = ym(new Date());
-  $("#expDate").value = today;
-  $("#oneDate").value = today;
-  ensureLTRNumeric();
-  applySavedSettings();
-  bindUI();
-  renderAll();
-  setupCharts();
-  window.addEventListener("hashchange", onHash);
-  onHash(); // أظهر الصفحة الصحيحة
-});
+/* 3) إصلاحات iOS: ارتفاعات وكيبورد */
+:root{
+  --bn-h: clamp(56px, 9vh, 72px);
+}
+/* استخدم svh بدل vh لتفادي قفزات شريط سفاري */
+@supports (height: 100svh){
+  .sheet{ max-height: 92svh; }
+}
+/* منع زوم iOS عند الفوكس (خلي مدخلاتك ≥16px) */
+input, select, textarea{ font-size: 16px; }
 
-// ===== Master render
-function renderAll() {
-  renderInst();
-  renderBills();
-  renderExpenses();
-  renderOne();
-  renderBudgets();
-  renderKPIs();
-  refreshCharts();
-  updateAlerts();
+/* 4) تأمين الـFAB فوق الشريط مع النوتش */
+.fab{
+  inset-inline-end: calc(12px + env(safe-area-inset-right));
+  bottom: calc(var(--bn-h) + 14px + env(safe-area-inset-bottom));
 }
