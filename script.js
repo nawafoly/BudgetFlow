@@ -64,11 +64,10 @@ const setLS = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
 // ===== Common (due / paid)
 const withinMonthRange = (start, end, yyyymm) => {
-  const s = ym(start);                 // بداية المدة
-  const e = end ? ym(end) : "9999-12"; // لو ما فيه نهاية نعتبره مستمر
-  return yyyymm >= s && yyyymm <= e;   // داخل النطاق؟
+  const s = ym(start);
+  const e = end ? ym(end) : "9999-12";
+  return yyyymm >= s && yyyymm <= e;
 };
-
 const dueThisMonth = (item, yyyymm) =>
   withinMonthRange(item.start, item.end, yyyymm) ? Number(item.amount || 0) : 0;
 const isPaid = (kind, id, yyyymm) =>
@@ -93,8 +92,8 @@ const payLabel = (p) =>
     transfer: "🏦 تحويل",
     wallet: "📱 محفظة",
   }[p] ||
-  p ||
-  "-");
+    p ||
+    "-");
 
 // ===== UI LTR numeric for inputs
 function ensureLTRNumeric() {
@@ -302,19 +301,19 @@ function bindUI() {
   );
   $("#exportJSON").addEventListener("click", exportJSON);
 
-  // تقارير
+  // تقارير (موجودة أيضاً في Speed Dial)
   $("#btnReport")?.addEventListener("click", openDetailedReport);
   $("#btnCompare")?.addEventListener("click", openCompare);
 
   // Modal
   setupModal();
 
-  // اختصار E لفتح المودال (مباشرة بدون ضغط الزر)
+  // اختصار E لفتح المودال
   document.addEventListener("keydown", (e) => {
     const isTyping = /^(input|textarea|select)$/i.test(e.target?.tagName);
     if (!isTyping && e.key.toLowerCase() === "e") {
       e.preventDefault();
-      openModal(); // ✅ بدلاً من $("#openModalBtn")?.click()
+      openModal();
     }
   });
 }
@@ -322,7 +321,6 @@ function bindUI() {
 function openModal() {
   const modal = $("#modal");
   if (!modal) return;
-  // أغلق الـSpeed Dial لو مفتوح
   $("#speedDial")?.classList.remove("open");
   modal.classList.add("show");
   ensureLTRNumeric();
@@ -335,16 +333,10 @@ function openModal() {
 // ===== Modal (+)
 function setupModal() {
   const modal = $("#modal");
-
-  // ❌ لا تربط كليك زر الـ FAB هنا (عشان ما يتعارض مع الـ Speed Dial)
-  // خليه فقط مسؤول عن إغلاق/فتح المودال نفسه
-
   $("#closeModal")?.addEventListener("click", () => modal.classList.remove("show"));
-
   modal?.addEventListener("click", (e) => {
     if (e.target === modal) modal.classList.remove("show");
   });
-
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") modal.classList.remove("show");
   });
@@ -453,176 +445,271 @@ function priorityKey(kind, item, yyyymm) {
 
 function renderInst() {
   const curM = $("#monthPicker").value;
-  const L = getLS(K.inst, "[]");
-  const tbody = $("#instTable tbody");
-  tbody.innerHTML = "";
-  if (!L.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="muted">لا توجد أقساط</td></tr>`;
+  const list = getLS(K.inst, "[]");
+  const cardsWrap = $("#instCards");
+  const tbody = document.querySelector("#instTable tbody");
+  if (tbody) tbody.innerHTML = "";
+  cardsWrap.innerHTML = "";
+
+  if (!list.length) {
+    if (tbody) tbody.innerHTML = `<tr><td class="muted" colspan="7">لا توجد أقساط</td></tr>`;
+    cardsWrap.innerHTML = `<div class="inst-card" style="text-align:center;color:var(--muted)">لا توجد أقساط</div>`;
     return;
   }
-  L.sort((a, b) => {
-    const [pa, da, na] = priorityKey("inst", a, curM);
-    const [pb, db, nb] = priorityKey("inst", b, curM);
-    return pa - pb || da - db || na.localeCompare(nb);
+
+  // ترتيب ذكي: متأخر → قريب → هذا الشهر → مدفوع → لا يستحق
+  const sorted = [...list].sort((a, b) => {
+    const pa = priorityKey("inst", a, curM);
+    const pb = priorityKey("inst", b, curM);
+    return pa[0] - pb[0] || pa[1] - pb[1] || pa[2].localeCompare(pb[2]);
   });
-  const nowYM = ym(new Date());
-  L.forEach((item) => {
+
+  sorted.forEach(item => {
+    const range = `${item.start || "—"} → ${item.end || "—"}`;
     const dueAmt = dueThisMonth(item, curM);
     const paid = isPaid("inst", item.id, curM);
     const status = statusChip(paid, dueAmt, item, curM);
-    const y = +curM.slice(0, 4),
-      m = +curM.slice(5, 7),
-      last = lastDayOfMonth(y, m);
-    const dueDay = Math.min(item.dueDay || last, last);
-    const prevM = prevMonthStr(curM),
-      prevDue = dueThisMonth(item, prevM),
-      prevPaid = isPaid("inst", item.id, prevM);
-    const canPayPrev = prevDue > 0 && !prevPaid;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td data-label="الاسم">${item.name}</td>
-      <td data-label="المبلغ" class="fit">${fmt(item.amount)}</td>
-      <td data-label="المدى" class="fit">${item.start}${item.end ? ` → ${item.end}` : ""}</td>
-      <td data-label="يوم الاستحقاق" class="fit">${dueDay}</td>
-      <td data-label="استحقاق هذا الشهر" class="fit">${fmt(dueAmt)}</td>
-      <td data-label="الحالة" class="fit">${status}</td>
-      <td data-label="الإجراءات" class="fit">
-        <div class="flex gap-2">
-          ${
-            dueAmt > 0
-              ? `<button class="btn ${paid ? "ghost" : "primary"}" onclick="togglePaid('inst','${item.id}','${curM}')">${
-                  paid ? "إلغاء الدفع" : curM < nowYM ? "دفع هذا الشهر (متأخر)" : "تحديد كمدفوع"
-                }</button>`
-              : ""
-          }
-          ${
-            canPayPrev
-              ? `<button class="btn warning" title="تسجيل دفع الشهر السابق (${prevM})" onclick="payPrev('inst','${item.id}')">دفع متأخر (${prevM})</button>`
-              : ""
-          }
-          <button class="btn danger" onclick="deleteItem('inst','${item.id}')">حذف</button>
+
+    // جدول مخفي (للتصدير مستقبلًا)
+    if (tbody) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td data-label="الاسم">${item.name || "-"}</td>
+        <td class="fit" data-label="المبلغ">${fmt(item.amount)}</td>
+        <td class="fit" data-label="المدى">${range}</td>
+        <td class="fit" data-label="يوم الاستحقاق">${item.dueDay ?? "-"}</td>
+        <td class="fit" data-label="استحقاق هذا الشهر">${dueAmt ? fmt(dueAmt) : "-"}</td>
+        <td class="fit" data-label="الحالة">${status}</td>
+        <td class="fit" data-label="الإجراءات">
+          <div class="flex gap-2">
+            <button class="btn ghost" onclick="togglePaid('inst','${item.id}','${curM}')">${paid ? "↩️ إلغاء الدفع" : "✅ تعليم كمدفوع"}</button>
+            <button class="btn danger" onclick="deleteItem('inst','${item.id}')">🗑️ حذف</button>
+          </div>
+        </td>`;
+      tbody.appendChild(tr);
+    }
+
+    // الكرت
+    const card = document.createElement("div");
+    card.className = "inst-card";
+    card.innerHTML = `
+      <div class="inst-card-head">
+        <div>
+          <div class="inst-title">${item.name || "-"}</div>
+          <div class="inst-sub">${range}</div>
         </div>
-      </td>`;
-    tbody.appendChild(tr);
+        <div class="inst-status">${status}</div>
+      </div>
+
+      <div class="inst-grid">
+        <div class="inst-item"><div class="lbl">المبلغ</div><div class="val">${fmt(item.amount)}</div></div>
+        <div class="inst-item"><div class="lbl">يوم الاستحقاق</div><div class="val">${item.dueDay ?? "-"}</div></div>
+        <div class="inst-item"><div class="lbl">استحقاق هذا الشهر</div><div class="val">${dueAmt ? fmt(dueAmt) : "-"}</div></div>
+      </div>
+
+      <div class="inst-actions">
+        <button class="btn ghost" onclick="togglePaid('inst','${item.id}','${curM}')">${paid ? "↩️ إلغاء الدفع" : "✅ تعليم كمدفوع"}</button>
+        <button class="btn danger" onclick="deleteItem('inst','${item.id}')">🗑️ حذف</button>
+      </div>`;
+    cardsWrap.appendChild(card);
   });
 }
 
 function renderBills() {
   const curM = $("#monthPicker").value;
-  const L = getLS(K.bills, "[]");
-  const tbody = $("#billTable tbody");
-  tbody.innerHTML = "";
-  if (!L.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="muted">لا توجد فواتير</td></tr>`;
+  const list = getLS(K.bills, "[]");
+  const cardsWrap = $("#billCards");
+  const tbody = document.querySelector("#billTable tbody");
+  if (tbody) tbody.innerHTML = "";
+  cardsWrap.innerHTML = "";
+
+  if (!list.length) {
+    if (tbody) tbody.innerHTML = `<tr><td class="muted" colspan="7">لا توجد فواتير</td></tr>`;
+    cardsWrap.innerHTML = `<div class="inst-card" style="text-align:center;color:var(--muted)">لا توجد فواتير</div>`;
     return;
   }
-  L.sort((a, b) => {
-    const [pa, da, na] = priorityKey("bills", a, curM);
-    const [pb, db, nb] = priorityKey("bills", b, curM);
-    return pa - pb || da - db || na.localeCompare(nb);
+
+  const sorted = [...list].sort((a,b) => {
+    const pa = priorityKey("bills", a, curM);
+    const pb = priorityKey("bills", b, curM);
+    return pa[0] - pb[0] || pa[1] - pb[1] || pa[2].localeCompare(pb[2]);
   });
-  const nowYM = ym(new Date());
-  L.forEach((item) => {
-    const dueAmt = dueThisMonth(item, curM);
-    const paid = isPaid("bills", item.id, curM);
-    const status = statusChip(paid, dueAmt, item, curM);
-    const y = +curM.slice(0, 4),
-      m = +curM.slice(5, 7),
-      last = lastDayOfMonth(y, m);
-    const dday = Math.min(item.dueDay || last, last);
-    const prevM = prevMonthStr(curM),
-      prevDue = dueThisMonth(item, prevM),
-      prevPaid = isPaid("bills", item.id, prevM);
-    const canPayPrev = prevDue > 0 && !prevPaid;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td data-label="الاسم">${item.name}</td>
-      <td data-label="المبلغ" class="fit">${fmt(item.amount)}</td>
-      <td data-label="المدى" class="fit">${item.start}${item.end ? ` → ${item.end}` : ""}</td>
-      <td data-label="يوم الاستحقاق" class="fit">${dday}</td>
-      <td data-label="استحقاق هذا الشهر" class="fit">${fmt(dueAmt)}</td>
-      <td data-label="الحالة" class="fit">${status}</td>
-      <td data-label="الإجراءات" class="fit">
-        <div class="flex gap-2">
-          ${
-            dueAmt > 0
-              ? `<button class="btn ${paid ? "ghost" : "primary"}" onclick="togglePaid('bills','${item.id}','${curM}')">${
-                  paid ? "إلغاء الدفع" : curM < nowYM ? "دفع هذا الشهر (متأخر)" : "تحديد كمدفوع"
-                }</button>`
-              : ""
-          }
-          ${
-            canPayPrev
-              ? `<button class="btn warning" title="تسجيل دفع الشهر السابق (${prevM})" onclick="payPrev('bills','${item.id}')">دفع متأخر (${prevM})</button>`
-              : ""
-          }
-          <button class="btn danger" onclick="deleteItem('bills','${item.id}')">حذف</button>
+
+  sorted.forEach(bill => {
+    const range = `${bill.start || "—"} → ${bill.end || "—"}`;
+    const dueAmt = dueThisMonth(bill, curM);
+    const paid = isPaid("bills", bill.id, curM);
+    const status = statusChip(paid, dueAmt, bill, curM);
+
+    if (tbody) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td data-label="الاسم">${bill.name || "-"}</td>
+        <td class="fit" data-label="المبلغ">${fmt(bill.amount)}</td>
+        <td class="fit" data-label="المدى">${range}</td>
+        <td class="fit" data-label="يوم الاستحقاق">${bill.dueDay ?? "-"}</td>
+        <td class="fit" data-label="استحقاق هذا الشهر">${dueAmt ? fmt(dueAmt) : "-"}</td>
+        <td class="fit" data-label="الحالة">${status}</td>
+        <td class="fit" data-label="الإجراءات">
+          <div class="flex gap-2">
+            <button class="btn ghost" onclick="togglePaid('bills','${bill.id}','${curM}')">${paid ? "↩️ إلغاء الدفع" : "✅ تعليم كمدفوع"}</button>
+            <button class="btn danger" onclick="deleteItem('bills','${bill.id}')">🗑️ حذف</button>
+          </div>
+        </td>`;
+      tbody.appendChild(tr);
+    }
+
+    const card = document.createElement("div");
+    card.className = "inst-card";
+    card.innerHTML = `
+      <div class="inst-card-head">
+        <div>
+          <div class="inst-title">${bill.name || "-"}</div>
+          <div class="inst-sub">${range}</div>
         </div>
-      </td>`;
-    tbody.appendChild(tr);
+        <div class="inst-status">${status}</div>
+      </div>
+
+      <div class="inst-grid">
+        <div class="inst-item"><div class="lbl">المبلغ</div><div class="val">${fmt(bill.amount)}</div></div>
+        <div class="inst-item"><div class="lbl">يوم الاستحقاق</div><div class="val">${bill.dueDay ?? "-"}</div></div>
+        <div class="inst-item"><div class="lbl">استحقاق هذا الشهر</div><div class="val">${dueAmt ? fmt(dueAmt) : "-"}</div></div>
+      </div>
+
+      <div class="inst-actions">
+        <button class="btn ghost" onclick="togglePaid('bills','${bill.id}','${curM}')">${paid ? "↩️ إلغاء الدفع" : "✅ تعليم كمدفوع"}</button>
+        <button class="btn danger" onclick="deleteItem('bills','${bill.id}')">🗑️ حذف</button>
+      </div>`;
+    cardsWrap.appendChild(card);
   });
 }
 
 function renderExpenses() {
   const curM = $("#monthPicker").value;
-  const q = ($("#searchInput").value || "").toLowerCase();
-  const L = getLS(K.exps, "[]")
-    .filter(
-      (x) =>
-        ym(x.date) === curM &&
-        (!q || normCat(x.cat).includes(q) || normCat(x.note).includes(q))
-    )
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const tbody = $("#expTable tbody");
-  tbody.innerHTML = "";
-  let total = 0;
-  if (!L.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="muted">لا توجد مصروفات</td></tr>`;
-  } else {
-    L.forEach((item) => {
-      total += Number(item.amount || 0);
+  const search = ($("#searchInput")?.value || "").toLowerCase().trim();
+  const listAll = getLS(K.exps, "[]");
+  const list = listAll
+    .filter(x => ym(x.date) === curM)
+    .filter(x => !search ||
+      normCat(x.cat).includes(search) ||
+      (x.note || "").toLowerCase().includes(search));
+
+  const cardsWrap = $("#expCards");
+  const tbody = document.querySelector("#expTable tbody");
+  const totalEl = $("#expShownTotal");
+
+  if (tbody) tbody.innerHTML = "";
+  cardsWrap.innerHTML = "";
+
+  if (!list.length) {
+    if (tbody) tbody.innerHTML = `<tr><td class="muted" colspan="6">لا توجد مصروفات</td></tr>`;
+    cardsWrap.innerHTML = `<div class="inst-card" style="text-align:center;color:var(--muted)">لا توجد مصروفات</div>`;
+    if (totalEl) totalEl.textContent = "0";
+    return;
+  }
+
+  let shownTotal = 0;
+
+  list.sort((a,b) => (a.date || "").localeCompare(b.date || "")).forEach(exp => {
+    shownTotal += Number(exp.amount || 0);
+
+    // جدول
+    if (tbody) {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td data-label="التاريخ">${item.date}</td>
-        <td data-label="التصنيف"><span class="chip blue">${item.cat}</span></td>
-        <td data-label="الوصف">${item.note || "-"}</td>
-        <td data-label="الدفع" class="fit">${payLabel(item.pay)}</td>
-        <td data-label="المبلغ" class="fit">${fmt(item.amount)}</td>
-        <td data-label="الإجراءات" class="fit">
-          <button class="btn danger" onclick="deleteItem('exps','${item.id}')">حذف</button>
+        <td data-label="التاريخ">${exp.date}</td>
+        <td data-label="التصنيف"><span class="chip blue">${exp.cat}</span></td>
+        <td data-label="الوصف">${exp.note || "-"}</td>
+        <td class="fit" data-label="الدفع">${payLabel(exp.pay)}</td>
+        <td class="fit" data-label="المبلغ">${fmt(exp.amount)}</td>
+        <td class="fit" data-label="الإجراءات">
+          <div class="flex gap-2">
+            <button class="btn danger" onclick="deleteItem('exps','${exp.id}')">🗑️ حذف</button>
+          </div>
         </td>`;
       tbody.appendChild(tr);
-    });
-  }
-  $("#expShownTotal").textContent = fmt(total);
+    }
+
+    // كرت
+    const card = document.createElement("div");
+    card.className = "inst-card";
+    card.innerHTML = `
+      <div class="inst-card-head">
+        <div>
+          <div class="inst-title">${exp.cat}</div>
+          <div class="inst-sub">${exp.date}</div>
+        </div>
+        <div class="inst-amount">${fmt(exp.amount)}</div>
+      </div>
+      <div class="inst-grid">
+        <div class="inst-item"><div class="lbl">الوصف</div><div class="val">${exp.note || "-"}</div></div>
+        <div class="inst-item"><div class="lbl">طريقة الدفع</div><div class="val">${payLabel(exp.pay)}</div></div>
+      </div>
+      <div class="inst-actions">
+        <button class="btn danger" onclick="deleteItem('exps','${exp.id}')">🗑️ حذف</button>
+      </div>`;
+    cardsWrap.appendChild(card);
+  });
+
+  if (totalEl) totalEl.textContent = fmt(shownTotal);
 }
 
 function renderOne() {
   const curM = $("#monthPicker").value;
-  const L = getLS(K.one, "[]")
-    .filter((x) => ym(x.date) === curM)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const tbody = $("#oneTable tbody");
-  tbody.innerHTML = "";
-  if (!L.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="muted">لا توجد مصاريف خارجية</td></tr>`;
+  const list = getLS(K.one, "[]").filter(x => ym(x.date) === curM);
+
+  const cardsWrap = $("#oneCards");
+  const tbody = document.querySelector("#oneTable tbody");
+  if (tbody) tbody.innerHTML = "";
+  cardsWrap.innerHTML = "";
+
+  if (!list.length) {
+    if (tbody) tbody.innerHTML = `<tr><td class="muted" colspan="6">لا توجد مصاريف خارجية</td></tr>`;
+    cardsWrap.innerHTML = `<div class="inst-card" style="text-align:center;color:var(--muted)">لا توجد مصاريف خارجية</div>`;
     return;
   }
-  L.forEach((item) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td data-label="التاريخ">${item.date}</td>
-      <td data-label="النوع">${item.cat}</td>
-      <td data-label="ملاحظة">${item.note || "-"}</td>
-      <td data-label="المبلغ" class="fit">${fmt(item.amount)}</td>
-      <td data-label="الحالة" class="fit"><span class="chip ${item.paid ? "green" : "orange"}">${item.paid ? "مدفوع" : "غير مدفوع"}</span></td>
-      <td data-label="الإجراءات" class="fit">
-        <div class="flex gap-2">
-          <button class="btn ${item.paid ? "ghost" : "primary"}" onclick="togglePaid('one','${item.id}','${curM}')">${item.paid ? "إلغاء الدفع" : "تحديد كمدفوع"}</button>
-          <button class="btn danger" onclick="deleteItem('one','${item.id}')">حذف</button>
+
+  list.sort((a,b) => (a.date || "").localeCompare(b.date || "")).forEach(item => {
+    const chip = item.paid ? `<span class="chip green">مدفوع</span>` : `<span class="chip warning">غير مدفوع</span>`;
+
+    // جدول
+    if (tbody) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td data-label="التاريخ">${item.date}</td>
+        <td data-label="النوع"><span class="chip blue">${item.cat}</span></td>
+        <td data-label="ملاحظة">${item.note || "-"}</td>
+        <td class="fit" data-label="المبلغ">${fmt(item.amount)}</td>
+        <td class="fit" data-label="الحالة">${chip}</td>
+        <td class="fit" data-label="الإجراءات">
+          <div class="flex gap-2">
+            <button class="btn ghost" onclick="togglePaid('one','${item.id}')">${item.paid ? "↩️ تعليم كغير مدفوع" : "✅ تعليم كمدفوع"}</button>
+            <button class="btn danger" onclick="deleteItem('one','${item.id}')">🗑️ حذف</button>
+          </div>
+        </td>`;
+      tbody.appendChild(tr);
+    }
+
+    // كرت
+    const card = document.createElement("div");
+    card.className = "inst-card";
+    card.innerHTML = `
+      <div class="inst-card-head">
+        <div>
+          <div class="inst-title">${item.cat}</div>
+          <div class="inst-sub">${item.date}</div>
         </div>
-      </td>`;
-    tbody.appendChild(tr);
+        <div class="inst-amount">${fmt(item.amount)}</div>
+      </div>
+      <div class="inst-grid">
+        <div class="inst-item"><div class="lbl">ملاحظة</div><div class="val">${item.note || "-"}</div></div>
+        <div class="inst-item"><div class="lbl">الحالة</div><div class="val">${chip}</div></div>
+      </div>
+      <div class="inst-actions">
+        <button class="btn ghost" onclick="togglePaid('one','${item.id}')">${item.paid ? "↩️ تعليم كغير مدفوع" : "✅ تعليم كمدفوع"}</button>
+        <button class="btn danger" onclick="deleteItem('one','${item.id}')">🗑️ حذف</button>
+      </div>`;
+    cardsWrap.appendChild(card);
   });
 }
 
@@ -666,10 +753,9 @@ function renderKPIs() {
   const instList = getLS(K.inst, "[]");
   const billsList = getLS(K.bills, "[]");
 
-  let instTotal = 0,
-    billsTotal = 0;
+  let instTotal = 0, billsTotal = 0;
   [...instList, ...billsList].forEach((item) => {
-    const kind = instList.includes(item) ? "inst" : "bills"; // ملاحظة: يعتمد على نفس مرجع المصفوفة
+    const kind = instList.includes(item) ? "inst" : "bills";
     const dueAmt = dueThisMonth(item, curM);
     if (dueAmt > 0) {
       const paid = isPaid(kind, item.id, curM);
@@ -768,14 +854,8 @@ function setupCharts() {
           {
             data: [],
             backgroundColor: [
-              "#4f8cff",
-              "#22c55e",
-              "#ef4444",
-              "#f59e0b",
-              "#8b5cf6",
-              "#10b981",
-              "#e11d48",
-              "#14b8a6",
+              "#4f8cff","#22c55e","#ef4444","#f59e0b",
+              "#8b5cf6","#10b981","#e11d48","#14b8a6",
             ],
           },
         ],
@@ -927,8 +1007,7 @@ function exportJSON() {
 
 // ===== Budget warning
 function checkBudgetWarn(catRaw) {
-  const curM = $("#monthPicker").value,
-    cat = normCat(catRaw);
+  const curM = $("#monthPicker").value, cat = normCat(catRaw);
   const B = getLS(K.budgets, "[]");
   const budget = B.find((b) => normCat(b.cat) === cat);
   if (!budget) return;
@@ -944,14 +1023,7 @@ function checkBudgetWarn(catRaw) {
 }
 
 // ===== Router (hash)
-const ROUTES = [
-  "summary",
-  "installments",
-  "bills",
-  "expenses",
-  "one-time",
-  "settings",
-];
+const ROUTES = ["summary","installments","bills","expenses","one-time","settings"];
 const sections = Array.from(document.querySelectorAll("[data-route]"));
 const navLinks = Array.from(document.querySelectorAll(".bottom-nav .nav-links a"));
 const fabBtn = document.getElementById("openModalBtn");
@@ -971,8 +1043,8 @@ function fabConfig(route) {
     bills:        { label: "＋", title: "إضافة فاتورة",    action: () => openForm("billForm") },
     expenses:     { label: "＋", title: "إضافة مصروف",     action: () => openForm("expForm") },
     "one-time":   { label: "＋", title: "مصروف خارجي",     action: () => openForm("oneForm") },
-    summary:      { label: "＋", title: "إضافة سريعة",      action: () => openQuickAdd() },
-    settings:     { label: "＋", title: "اختصار سريع",      action: () => openQuickAdd() },
+    summary:      { label: "＋", title: "إضافة سريعة",     action: () => openQuickAdd() },
+    settings:     { label: "＋", title: "اختصار سريع",     action: () => openQuickAdd() },
   };
   return map[route] || map.summary;
 }
@@ -989,7 +1061,6 @@ function showRoute(r) {
   if (fabBtn) {
     fabBtn.textContent = cfg.label;
     fabBtn.setAttribute("aria-label", cfg.title);
-    // ❌ لا تربط: fabBtn.onclick = cfg.action; (يظل التحكم عبر Speed Dial/ضغط مطوّل)
   }
 
   const prev = Number(localStorage.getItem(scrollKey(r) || "0")) || 0;
@@ -999,14 +1070,14 @@ function onHash() {
   showRoute((location.hash || "#summary").slice(1));
 }
 function openForm(id) {
-  openModal(); // ✅ افتح المودال مباشرة
+  openModal();
   setTimeout(
     () => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }),
     60
   );
 }
 function openQuickAdd() {
-  openModal(); // ✅ مباشرة
+  openModal();
 }
 
 // ===== Detailed Report
@@ -1131,7 +1202,6 @@ function runIdleTasks(tasks, timeout = 200) {
   let i = 0;
   const runner = (deadline) => {
     while (i < tasks.length) {
-      // لو الوقت المتبقي قليل، اترك الباقي لدفعة لاحقة
       if (deadline?.timeRemaining && deadline.timeRemaining() < 8) break;
       const task = tasks[i++];
       task();
@@ -1143,7 +1213,6 @@ function runIdleTasks(tasks, timeout = 200) {
   if ("requestIdleCallback" in window) {
     requestIdleCallback(runner, { timeout });
   } else {
-    // Fallback
     const step = () => {
       if (i < tasks.length) {
         tasks[i++]();
@@ -1163,7 +1232,13 @@ document.addEventListener("DOMContentLoaded", () => {
   applySavedSettings();
   bindUI();
 
-  // ✅ أرسم المحتوى الأساسي بسرعة بدون أشياء ثقيلة
+  // ✅ نفّذ فحص الخصم/الترحيل بعد ضبط الشهر (تم نقلها من آخر الملف)
+  const st = getLS(K.settings, '{"cash":false,"auto":false,"roll":false}');
+  const curM = $("#monthPicker").value;
+  if (st.auto) autoDeductIfDue(curM);
+  if (st.roll) rolloverArrears(curM);
+
+  // رسم المحتوى الأساسي
   renderInst();
   renderBills();
   renderExpenses();
@@ -1173,9 +1248,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // تنقّل الراوتر
   window.addEventListener("hashchange", onHash);
-  onHash(); // أظهر الصفحة الصحيحة
+  onHash();
 
-  // ⏳ أجّل الأشياء الثقيلة بعد أول رسم/وقت خامل
+  // ⏳ أشياء ثقيلة بعد أول رسم
   const afterFirstPaint = () => {
     setupCharts();
     refreshCharts();
@@ -1184,14 +1259,12 @@ document.addEventListener("DOMContentLoaded", () => {
   if ("requestIdleCallback" in window) {
     requestIdleCallback(afterFirstPaint, { timeout: 1000 });
   } else {
-    // fallback سريع
     setTimeout(afterFirstPaint, 120);
   }
 });
 
 // ===== Master render
 function renderAll() {
-  // مبدئيًا نخليه كما هو للاستخدامات الأخرى
   renderInst();
   renderBills();
   renderExpenses();
@@ -1206,41 +1279,36 @@ function renderAll() {
 document.addEventListener('DOMContentLoaded', () => {
   const fab   = document.getElementById('openModalBtn');
   const dial  = document.getElementById('speedDial');
-  const modal = document.getElementById('modal');
 
-  if (!fab || !dial) return; // أمان
+  if (!fab || !dial) return;
 
   const closeDial = () => dial.classList.remove('open');
   const openModalDirect = () => window.openModal?.();
 
   let holdTimer, longPress = false;
 
-  // ضغطة سريعة على الـ FAB => افتح/اقفل Speed Dial
   fab.addEventListener('click', () => {
     if (longPress) { longPress = false; return; }
     dial.classList.toggle('open');
   });
 
-  // ضغط مطوّل => افتح المودال مباشرة
   const startHold = () => {
     clearTimeout(holdTimer);
     holdTimer = setTimeout(() => {
       longPress = true;
       closeDial();
-      openModalDirect(); // ✅ استدعاء الدالة العامة
-    }, 600); // 600ms
+      openModalDirect();
+    }, 600);
   };
   const endHold = () => clearTimeout(holdTimer);
 
   ['mousedown','touchstart'].forEach(ev => fab.addEventListener(ev, startHold, {passive:true}));
   ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev => fab.addEventListener(ev, endHold));
 
-  // اقفل الاختصارات إذا ضغطت خارج (الديال أو الزر)
   document.addEventListener('click', (e) => {
     if (!dial.contains(e.target) && !fab.contains(e.target)) closeDial();
   });
 
-  // ✅ أزرار الاختصارات تستدعي الدوال مباشرة
   document.getElementById('sdCompare')?.addEventListener('click', () => {
     closeDial();
     openCompare();
@@ -1250,10 +1318,3 @@ document.addEventListener('DOMContentLoaded', () => {
     openDetailedReport();
   });
 });
-
-// التحقق من الترحيل التلقائي والمتأخرات
-const curM = $("#monthPicker").value;
-const st = getLS(K.settings, '{"cash":false,"auto":false,"roll":false}');
-
-if (st.auto) autoDeductIfDue(curM);
-if (st.roll) rolloverArrears(curM);
