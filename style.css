@@ -1608,3 +1608,8 @@ input, select, textarea{ font-size: 16px; }
 /* منع انعكاس اتجاه التاريخ/السهم */
 .inst-item[data-k="range"] .val,
 .inst-sub{ direction:ltr; text-align:left; unicode-bidi:plaintext; }
+
+#bills .table-container,
+#expenses .table-container,
+#one-time .table-container { display: none !important; }
+
