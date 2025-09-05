@@ -1,14 +1,5 @@
-/*
-  CSS المحسّن الموحّد - Final v2.1 (clean)
-  - إزالة التكرار والتعارض
-  - توحيد الثيمات (داكن/فاتح)
-  - توحيد المودال والـ FAB والـ bottom-nav
-  - الأرقام تُعرض بالإنجليزية
-*/
-
-/* =========================
-   المتغيّرات (Dark)
-   ========================= */
+/* CSS المحسّن الموحّد - Final v2.1 (conflicts resolved) - دمج وإزالة التكرار - توحيد الثيمات (داكن/فاتح) - توحيد المودال والـ FAB والـ bottom-nav - الأرقام تُعرض بالإنجليزية */
+/* ========================= المتغيّرات (Dark) ========================= */
 :root {
     /* الألوان الأساسية */
     --bg: #0b0f19;
@@ -19,7 +10,6 @@
     --muted: #8da3c1;
     --border: #1f2937;
     --table: #0e1424;
-
     /* ألوان الواجهة */
     --primary: #2e90fa;
     --primary-700: #1b6fd6;
@@ -29,12 +19,10 @@
     --success-700: #047857;
     --warning: #f59e0b;
     --danger: #ef4444;
-
     /* تدرجات */
     --gradient-primary: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
     --gradient-success: linear-gradient(135deg, var(--success) 0%, var(--success-700) 100%);
     --gradient-warning: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
-
     /* ظلال وأحجام */
     --shadow: 0 10px 30px rgba(0, 0, 0, .35);
     --shadow-lg: 0 20px 60px rgba(0, 0, 0, .5);
@@ -42,7 +30,6 @@
     --card-radius: 20px;
     --input-radius: 12px;
     --btn-radius: 12px;
-
     /* إضافي */
     --ink: #e6eeff;
 }
@@ -59,7 +46,6 @@
     --border: #e5e7eb;
     --ink: #0f172a;
     --table: #fbfcfe;
-
     /* حركة */
     --primary: #5b5bd6;
     --primary-700: #4b4bd1;
@@ -69,11 +55,9 @@
     --success-700: #0f7a37;
     --warning: #d97706;
     --danger: #dc2626;
-
     /* ظلال */
     --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
     --shadow-lg: 0 16px 50px rgba(15, 23, 42, 0.12);
-
     /* تدرجات للفاتح */
     --gradient-primary: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
     --gradient-success: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
@@ -82,16 +66,11 @@
 
 /* خلفية الفاتح */
 :root.light body {
-    background:
-        radial-gradient(1200px 600px at 10% -20%, rgba(99, 102, 241, 0.10) 0%, transparent 60%),
-        radial-gradient(1200px 600px at 110% 0%, rgba(124, 58, 237, 0.08) 0%, transparent 60%),
-        linear-gradient(180deg, var(--bg), var(--bg2));
+    background: radial-gradient(1200px 600px at 10% -20%, rgba(99, 102, 241, 0.10) 0%, transparent 60%), radial-gradient(1200px 600px at 110% 0%, rgba(124, 58, 237, 0.08) 0%, transparent 60%), linear-gradient(180deg, var(--bg), var(--bg2));
     color: var(--text);
 }
 
-/* =========================
-   إعادة تعيين وأساسيات
-   ========================= */
+/* ========================= إعادة تعيين وأساسيات ========================= */
 *,
 *::before,
 *::after {
@@ -118,16 +97,11 @@ body {
     font-size: clamp(14px, 1.05vw, 16px);
     color: var(--text);
     font-family: "Tajawal", system-ui, "Noto Naskh Arabic UI", Arial, sans-serif;
-    background:
-        radial-gradient(1200px 600px at 20% -10%, #152038 0%, transparent 60%),
-        radial-gradient(1200px 600px at 120% 10%, #0a1a30 0%, transparent 60%),
-        linear-gradient(180deg, var(--bg), var(--bg2));
+    background: radial-gradient(1200px 600px at 20% -10%, #152038 0%, transparent 60%), radial-gradient(1200px 600px at 120% 10%, #0a1a30 0%, transparent 60%), linear-gradient(180deg, var(--bg), var(--bg2));
     transition: background 0.3s ease, color 0.3s ease;
 }
 
-/* =========================
-   الحاويات والـ Grid
-   ========================= */
+/* ========================= الحاويات والـ Grid ========================= */
 .container {
     max-width: 1400px;
     width: 100%;
@@ -162,9 +136,7 @@ body {
     }
 }
 
-/* =========================
-   التوب بار
-   ========================= */
+/* ========================= التوب بار ========================= */
 .topbar {
     position: sticky;
     top: 0;
@@ -248,9 +220,7 @@ body {
     transform: translateY(-1px);
 }
 
-/* =========================
-   البطاقات
-   ========================= */
+/* ========================= البطاقات ========================= */
 .card {
     background: var(--glass);
     -webkit-backdrop-filter: blur(20px);
@@ -320,9 +290,7 @@ body {
     font-size: 12px;
 }
 
-/* =========================
-   الأدوات والحقول
-   ========================= */
+/* ========================= الأدوات والحقول ========================= */
 .toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -388,9 +356,7 @@ textarea:focus {
     box-shadow: 0 0 0 3px rgba(99, 102, 241, .18);
 }
 
-/* =========================
-   الأزرار
-   ========================= */
+/* ========================= الأزرار ========================= */
 .btn {
     display: inline-flex;
     align-items: center;
@@ -460,6 +426,7 @@ textarea:focus {
     color: #fff;
 }
 
+/* لا نعرّف .btn.danger هنا لتجنّب التعارض — تعريفه بأسفل (Action Buttons) */
 .btn.ghost {
     background: transparent;
     border-color: var(--border);
@@ -498,9 +465,7 @@ textarea:focus {
     background: rgba(99, 102, 241, .14) !important;
 }
 
-/* =========================
-   مؤشرات (KPIs)
-   ========================= */
+/* ========================= مؤشرات (KPIs) ========================= */
 .kpis {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -564,9 +529,7 @@ textarea:focus {
     -webkit-text-fill-color: transparent;
 }
 
-/* =========================
-   الرسوم (Charts)
-   ========================= */
+/* ========================= الرسوم (Charts) ========================= */
 .charts {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -595,9 +558,7 @@ canvas {
     background: #fff !important;
 }
 
-/* =========================
-   الجداول
-   ========================= */
+/* ========================= الجداول ========================= */
 .table-container {
     width: 100%;
     overflow-x: auto;
@@ -711,9 +672,7 @@ canvas {
     }
 }
 
-/* =========================
-   الشرائح/التوست
-   ========================= */
+/* ========================= الشرائح/التوست ========================= */
 .toast {
     position: fixed;
     bottom: 20px;
@@ -762,9 +721,7 @@ canvas {
     background: #111827;
 }
 
-/* =========================
-   الـ FAB (+) — نسخة موحّدة
-   ========================= */
+/* ========================= الـ FAB (+) — نسخة موحّدة ========================= */
 .fab {
     position: fixed;
     right: calc(22px + env(safe-area-inset-right));
@@ -799,9 +756,7 @@ canvas {
     }
 }
 
-/* =========================
-   المودال/الشيت — نسخة موحّدة (.modal)
-   ========================= */
+/* ========================= المودال/الشيت — توحيد (استخدم .modal) ========================= */
 .modal {
     position: fixed;
     inset: 0;
@@ -911,9 +866,7 @@ canvas {
     font-size: 16px;
 }
 
-/* =========================
-   الشريط السفلي — Grid موحّدة
-   ========================= */
+/* ========================= الشريط السفلي — نسخة Grid موحّدة ========================= */
 .bottom-nav {
     position: fixed;
     bottom: 0;
@@ -1027,9 +980,7 @@ canvas {
     gap: 6px;
 }
 
-/* =========================
-   Chips (الحالات)
-   ========================= */
+/* ========================= Chips (الحالات) ========================= */
 .chip {
     display: inline-block;
     padding: 4px 10px;
@@ -1040,6 +991,204 @@ canvas {
     border: 1px solid transparent;
 }
 
+.chip.green {
+    background: rgba(34, 197, 94, .15);
+    color: #15803d;
+    border-color: rgba(34, 197, 94, .3);
+}
+
+.chip.green:hover {
+    background: rgba(34, 197, 94, .25);
+}
+
+.chip.orange {
+    background: rgba(239, 68, 68, .15);
+    color: #b91c1c;
+    border-color: rgba(239, 68, 68, .3);
+}
+
+.chip.orange:hover {
+    background: rgba(239, 68, 68, .25);
+}
+
+.chip.red {
+    background: rgba(239, 68, 68, .15);
+    color: #b91c1c;
+    border-color: rgba(239, 68, 68, .3);
+}
+
+.chip.red:hover {
+    background: rgba(239, 68, 68, .25);
+}
+
+.chip.warning {
+    background: rgba(245, 158, 11, .15);
+    color: #b45309;
+    border-color: rgba(245, 158, 11, .3);
+}
+
+.chip.warning:hover {
+    background: rgba(245, 158, 11, .25);
+}
+
+.chip.blue {
+    background: rgba(59, 130, 246, .15);
+    color: #1d4ed8;
+    border-color: rgba(59, 130, 246, .3);
+}
+
+.chip.blue:hover {
+    background: rgba(59, 130, 246, .25);
+}
+
+.chip.gray {
+    background: rgba(148, 163, 184, .18);
+    color: #334155;
+    border-color: rgba(148, 163, 184, .25);
+}
+
+.chip.gray:hover {
+    background: rgba(148, 163, 184, .28);
+}
+
+/* ========================= Action Buttons (Paid / Late / Unpay / Delete) ========================= */
+.btn.primary:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-lg);
+}
+
+.btn.late {
+    background: rgba(245, 158, 11, .12);
+    color: #b45309;
+    border: 1px solid rgba(245, 158, 11, .35);
+}
+
+.btn.late:hover {
+    background: rgba(245, 158, 11, .2);
+}
+
+.btn.unpay {
+    background: #f8fafc;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+}
+
+:root.light .btn.unpay {
+    background: #fff;
+}
+
+.btn.unpay:hover {
+    background: #eef2f7;
+}
+
+.btn.danger {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+}
+
+.btn.danger:hover {
+    background: #fecaca;
+}
+
+.actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* ========================= Utils ========================= */
+.flex {
+    display: flex;
+}
+
+.gap-4 {
+    gap: 16px;
+}
+
+.mt-4 {
+    margin-top: 16px;
+}
+
+.mb-4 {
+    margin-bottom: 16px;
+}
+
+.full {
+    grid-column: 1 / -1;
+}
+
+/* ========================= زر تبديل الثيم ========================= */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 64px;
+    height: 34px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    inset: 0;
+    background: #374151;
+    border-radius: 999px;
+    transition: background-color .25s;
+}
+
+.slider:before {
+    content: "🌙";
+    display: grid;
+    place-items: center;
+    position: absolute;
+    left: 6px;
+    bottom: 7px;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    color: #111;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform .25s, background-color .25s;
+}
+
+input:checked+.slider {
+    background: var(--primary);
+}
+
+input:checked+.slider:before {
+    transform: translateX(28px);
+    content: "☀️";
+}
+
+/* ========================= الأرقام بالإنجليزية ========================= */
+body {
+    font-variant-numeric: normal;
+    unicode-bidi: plaintext;
+}
+
+body,
+input,
+select,
+textarea,
+.kpi .val,
+.table,
+.btn,
+.toast {
+    font-family: "Tajawal", system-ui, Arial, sans-serif;
+    direction: rtl;
+    unicode-bidi: embed;
+}
+
+* {
+    font-feature-settings: "lnum";
+}
+
+/* ===== Chips (الحالات) محدثة ===== */
 /* مدفوع ✅ */
 .chip.green {
     background: rgba(34, 197, 94, .18);
@@ -1106,7 +1255,7 @@ canvas {
     background: rgba(148, 163, 184, .3);
 }
 
-/* درجات أوضح للوضع الفاتح */
+/* ===== ألوان أوضح للوضع الفاتح ===== */
 :root.light .chip.green {
     background: rgba(34, 197, 94, .12);
     color: #15803d;
@@ -1161,223 +1310,20 @@ canvas {
     background: rgba(148, 163, 184, .25);
 }
 
-/* =========================
-   Action Buttons (Paid / Late / Unpay / Delete)
-   ========================= */
+/* ===== أزرار الإجراءات (Hover أوضح) ===== */
 .btn.primary:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-lg);
     background: linear-gradient(135deg, #2563eb, #1d4ed8);
-}
-
-.btn.late {
-    background: rgba(245, 158, 11, .12);
-    color: #b45309;
-    border: 1px solid rgba(245, 158, 11, .35);
 }
 
 .btn.late:hover {
     background: rgba(249, 115, 22, .25);
 }
 
-.btn.unpay {
-    background: #f8fafc;
-    color: #334155;
-    border: 1px solid #cbd5e1;
-}
-
-:root.light .btn.unpay {
-    background: #fff;
-}
-
 .btn.unpay:hover {
     background: #e2e8f0;
-}
-
-.btn.danger {
-    background: #fee2e2;
-    color: #b91c1c;
-    border: 1px solid #fca5a5;
 }
 
 .btn.danger:hover {
     background: #f87171;
     color: #fff;
-}
-
-.actions-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-
-/* =========================
-   Utils
-   ========================= */
-.flex {
-    display: flex;
-}
-
-.gap-4 {
-    gap: 16px;
-}
-
-.mt-4 {
-    margin-top: 16px;
-}
-
-.mb-4 {
-    margin-bottom: 16px;
-}
-
-.full {
-    grid-column: 1 / -1;
-}
-
-/* =========================
-   زر تبديل الثيم
-   ========================= */
-.switch {
-    position: relative;
-    display: inline-block;
-    width: 64px;
-    height: 34px;
-}
-
-.switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.slider {
-    position: absolute;
-    inset: 0;
-    background: #374151;
-    border-radius: 999px;
-    transition: background-color .25s;
-}
-
-.slider:before {
-    content: "🌙";
-    display: grid;
-    place-items: center;
-    position: absolute;
-    left: 6px;
-    bottom: 7px;
-    width: 20px;
-    height: 20px;
-    font-size: 12px;
-    color: #111;
-    background: #fff;
-    border-radius: 50%;
-    transition: transform .25s, background-color .25s;
-}
-
-input:checked+.slider {
-    background: var(--primary);
-}
-
-input:checked+.slider:before {
-    transform: translateX(28px);
-    content: "☀️";
-}
-
-/* =========================
-   الأرقام بالإنجليزية
-   ========================= */
-body {
-    font-variant-numeric: normal;
-    unicode-bidi: plaintext;
-}
-
-body,
-input,
-select,
-textarea,
-.kpi .val,
-.table,
-.btn,
-.toast {
-    font-family: "Tajawal", system-ui, Arial, sans-serif;
-    direction: rtl;
-    unicode-bidi: embed;
-}
-
-* {
-    font-feature-settings: "lnum";
-}
-
-/* ===== HTML Compatibility Patch (v3.2) ===== */
-
-/* (1) زر إغلاق المودال بالـID المستخدم في HTML */
-#closeModal {
-    position: sticky;
-    top: 8px;
-    margin-left: auto;
-    border-radius: 12px;
-    min-height: 40px;
-}
-
-/* (2) شريط تقدّم هدف الادخار */
-.progress-bar-container {
-    display: grid;
-    gap: 8px;
-}
-
-.progress-label {
-    font-size: 13px;
-    color: var(--muted);
-}
-
-.progress-bar {
-    width: 100%;
-    height: 10px;
-    background: rgba(148, 163, 184, .18);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    overflow: hidden;
-}
-
-.progress-fill {
-    height: 100%;
-    width: 0%;
-    /* يتحرك بالـJS */
-    background: var(--gradient-success);
-    transition: width .35s ease;
-}
-
-/* (3) إجمالي المصاريف الظاهرة */
-.total-display {
-    margin-inline-start: auto;
-    font-weight: 700;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--text);
-}
-
-/* (4) Utilities */
-.mt-2 {
-    margin-top: 8px;
-}
-
-/* (5) مدخل الشهر داخل العنوان */
-#summary h2 input[type="month"] {
-    margin-inline-start: 10px;
-    min-width: 160px;
-    padding: 8px 10px;
-}
-
-/* (6) تحسين طفيف لتماسك أزرار nav-actions على الشاشات الضيقة */
-@media (max-width: 520px) {
-    .bottom-nav {
-        grid-template-columns: 1fr;
-        row-gap: 10px;
-    }
-
-    .bottom-nav .nav-actions {
-        justify-content: center;
-        flex-wrap: wrap;
-    }
 }
